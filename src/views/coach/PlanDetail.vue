@@ -61,8 +61,16 @@
                   <div style="margin-left: auto;">
                     <el-button
                       size="small"
+                      type="primary"
+                      @click.stop="handleEditSession(session)"
+                    >
+                      编辑课次
+                    </el-button>
+                    <el-button
+                      size="small"
                       type="danger"
                       @click.stop="handleDeleteSession(session)"
+                      style="margin-left: 10px;"
                     >
                       删除
                     </el-button>
@@ -101,13 +109,6 @@
                     </template>
                   </el-table-column>
                 </el-table>
-
-                <!-- 编辑课次按钮 -->
-                <div style="margin-top: 15px; text-align: right;">
-                  <el-button type="primary" size="small" @click="handleEditSession(session)">
-                    编辑课次
-                  </el-button>
-                </div>
               </div>
               <el-empty v-else description="暂无训练动作" />
             </el-collapse-item>
