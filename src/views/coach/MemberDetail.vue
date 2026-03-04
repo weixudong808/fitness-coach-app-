@@ -250,16 +250,15 @@ const loadTrainingStats = async () => {
   try {
     const memberId = route.params.id
 
-    // 1. 查询所有训练记录
-    const { data: records, error: recordsError } = await supabase
-      .from('member_session_records')
-      .select('*, session_id')
+    // 1. 查询会员的所有训练计划
+    const { data: memberPlans, error: plansError } = await supabase
+      .from('member_plans')
+      .select('template_id')
       .eq('member_id', memberId)
-      .order('session_date', { ascending: true })
 
-    if (recordsError) throw recordsError
+    if (plansError) throw plansError
 
-    if (!records || records.length === 0) {
+    if (!memberPlans || memberPlans.length === 0) {
       trainingStats.value = {
         totalSessions: 0,
         monthSessions: 0,
@@ -269,28 +268,49 @@ const loadTrainingStats = async () => {
       return
     }
 
-    // 2. 计算统计数据
+    // 2. 查询所有已完成的训练课次
+    const templateIds = memberPlans.map(p => p.template_id)
+    const { data: completedSessions, error: sessionsError } = await supabase
+      .from('training_sessions')
+      .select('*')
+      .in('template_id', templateIds)
+      .eq('completed', true)
+      .order('completed_date', { ascending: true })
+
+    if (sessionsError) throw sessionsError
+
+    if (!completedSessions || completedSessions.length === 0) {
+      trainingStats.value = {
+        totalSessions: 0,
+        monthSessions: 0,
+        completionRate: 0,
+        lastTrainingDate: '-'
+      }
+      return
+    }
+
+    // 3. 计算统计数据
     const now = new Date()
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const monthRecords = records.filter(r => new Date(r.session_date) >= thisMonth)
+    const monthSessions = completedSessions.filter(s => new Date(s.completed_date) >= thisMonth)
 
-    const lastRecord = records[records.length - 1]
-    const lastDate = new Date(lastRecord.session_date)
+    const lastSession = completedSessions[completedSessions.length - 1]
+    const lastDate = new Date(lastSession.completed_date)
 
     trainingStats.value = {
-      totalSessions: records.length,
-      monthSessions: monthRecords.length,
+      totalSessions: completedSessions.length,
+      monthSessions: monthSessions.length,
       completionRate: 100, // 所有记录都是已完成的
       lastTrainingDate: lastDate.toLocaleDateString('zh-CN')
     }
 
-    // 3. 生成最近30天的训练频率数据
+    // 4. 生成最近30天的训练频率数据
     const last30Days = []
     for (let i = 29; i >= 0; i--) {
       const date = new Date()
       date.setDate(date.getDate() - i)
       const dateStr = date.toISOString().split('T')[0]
-      const count = records.filter(r => r.session_date === dateStr).length
+      const count = completedSessions.filter(s => s.completed_date === dateStr).length
       last30Days.push({
         date: `${date.getMonth() + 1}/${date.getDate()}`,
         count
@@ -298,8 +318,8 @@ const loadTrainingStats = async () => {
     }
     frequencyData.value = last30Days
 
-    // 4. 查询动作进步数据
-    await loadExerciseProgress(records)
+    // 5. 查询动作进步数据
+    await loadExerciseProgress(completedSessions)
 
   } catch (error) {
     console.error('加载训练统计失败:', error)
@@ -310,36 +330,27 @@ const loadTrainingStats = async () => {
 }
 
 // 加载动作进步数据
-const loadExerciseProgress = async (sessionRecords) => {
+const loadExerciseProgress = async (completedSessions) => {
   try {
-    // 获取所有动作记录
-    const sessionRecordIds = sessionRecords.map(r => r.id)
+    // 获取所有已完成课次的动作记录
+    const sessionIds = completedSessions.map(s => s.id)
 
-    const { data: exerciseRecords, error } = await supabase
-      .from('member_exercise_records')
-      .select('*, exercise_id')
-      .in('session_record_id', sessionRecordIds)
+    const { data: exercises, error } = await supabase
+      .from('session_exercises')
+      .select('*')
+      .in('session_id', sessionIds)
 
     if (error) throw error
 
-    // 获取动作信息
-    const exerciseIds = [...new Set(exerciseRecords.map(r => r.exercise_id))]
-    const { data: exercises, error: exercisesError } = await supabase
-      .from('session_exercises')
-      .select('id, exercise_name')
-      .in('id', exerciseIds)
+    if (!exercises || exercises.length === 0) {
+      exerciseProgressData.value = []
+      return
+    }
 
-    if (exercisesError) throw exercisesError
-
-    // 按动作分组并整理进步数据
-    const exerciseMap = {}
-    exercises.forEach(ex => {
-      exerciseMap[ex.id] = ex.exercise_name
-    })
-
+    // 按动作名称分组并整理进步数据
     const progressByExercise = {}
-    exerciseRecords.forEach(record => {
-      const exerciseName = exerciseMap[record.exercise_id]
+    exercises.forEach(exercise => {
+      const exerciseName = exercise.exercise_name
       if (!exerciseName) return
 
       if (!progressByExercise[exerciseName]) {
@@ -347,13 +358,21 @@ const loadExerciseProgress = async (sessionRecords) => {
       }
 
       // 找到对应的训练日期
-      const sessionRecord = sessionRecords.find(sr => sr.id === record.session_record_id)
-      if (sessionRecord) {
+      const session = completedSessions.find(s => s.id === exercise.session_id)
+      if (session && session.completed_date) {
+        // 提取重量数值（去除单位）
+        const weightMatch = exercise.weight?.match(/(\d+(\.\d+)?)/)
+        const weight = weightMatch ? parseFloat(weightMatch[1]) : 0
+
+        // 提取次数数值
+        const repsMatch = exercise.reps_standard?.match(/(\d+)/)
+        const reps = repsMatch ? parseInt(repsMatch[1]) : 0
+
         progressByExercise[exerciseName].push({
-          date: sessionRecord.session_date,
-          weight: record.actual_weight,
-          reps: record.actual_reps,
-          sets: record.actual_sets
+          date: session.completed_date,
+          weight: weight,
+          reps: reps,
+          sets: exercise.sets || 0
         })
       }
     })
