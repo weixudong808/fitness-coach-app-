@@ -109,14 +109,13 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, from) => {
   // 这里暂时简化处理，后续会完善认证逻辑
   if (to.meta.requiresAuth) {
     // TODO: 检查用户是否已登录
-    next()
-  } else {
-    next()
+    return true
   }
+  return true
 })
 
 export default router
