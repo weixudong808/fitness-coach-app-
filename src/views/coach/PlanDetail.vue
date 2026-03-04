@@ -27,7 +27,12 @@
       <!-- 训练课次列表 -->
       <el-card style="margin-top: 20px">
         <template #header>
-          <h3>训练课次</h3>
+          <div class="card-header">
+            <h3>训练课次</h3>
+            <el-button type="primary" size="small" @click="handleAddSession">
+              添加训练课次
+            </el-button>
+          </div>
         </template>
         <div v-if="trainingSessions.length > 0">
           <el-collapse v-model="activeSession" accordion>
@@ -267,6 +272,20 @@ const handleEditSession = (session) => {
     query: {
       from: 'plan-detail',
       sessionId: session.id
+    }
+  })
+}
+
+// 添加训练课次
+const handleAddSession = () => {
+  // 跳转到添加课次页面，传递模板ID和计划ID
+  router.push({
+    name: 'coach-template-edit',
+    params: { id: planDetail.value.template_id },
+    query: {
+      from: 'plan-detail',
+      mode: 'add-session',
+      planId: planDetail.value.id
     }
   })
 }
