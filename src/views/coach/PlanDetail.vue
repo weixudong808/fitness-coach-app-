@@ -7,7 +7,12 @@
       <!-- 计划基本信息 -->
       <el-card style="margin-top: 20px">
         <template #header>
-          <h3>计划信息</h3>
+          <div class="card-header">
+            <h3>计划信息</h3>
+            <el-button type="primary" size="small" @click="showEditPlanInfoDialog = true">
+              编辑
+            </el-button>
+          </div>
         </template>
         <el-descriptions :column="2" border>
           <el-descriptions-item label="模板名称">{{ planDetail.template_name }}</el-descriptions-item>
@@ -121,6 +126,73 @@
         <el-button type="danger" @click="handleDeletePlan">删除计划</el-button>
       </div>
     </div>
+
+    <!-- 编辑计划信息对话框 -->
+    <el-dialog
+      v-model="showEditPlanInfoDialog"
+      title="编辑计划信息"
+      width="600px"
+    >
+      <el-form :model="editPlanForm" label-width="100px">
+        <el-form-item label="模板名称">
+          <el-input v-model="editPlanForm.template_name" placeholder="请输入模板名称" />
+        </el-form-item>
+
+        <el-form-item label="训练目标">
+          <el-input v-model="editPlanForm.target_goal" placeholder="请输入训练目标" />
+        </el-form-item>
+
+        <el-form-item label="难度等级">
+          <el-select v-model="editPlanForm.difficulty_level" placeholder="请选择难度等级">
+            <el-option label="初级" value="beginner" />
+            <el-option label="中级" value="intermediate" />
+            <el-option label="高级" value="advanced" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="状态">
+          <el-select v-model="editPlanForm.status" placeholder="请选择状态">
+            <el-option label="进行中" value="active" />
+            <el-option label="已完成" value="completed" />
+            <el-option label="已取消" value="cancelled" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="开始日期">
+          <el-date-picker
+            v-model="editPlanForm.start_date"
+            type="date"
+            placeholder="选择开始日期"
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item label="结束日期">
+          <el-date-picker
+            v-model="editPlanForm.end_date"
+            type="date"
+            placeholder="选择结束日期"
+            style="width: 100%"
+          />
+        </el-form-item>
+
+        <el-form-item label="备注">
+          <el-input
+            v-model="editPlanForm.notes"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入备注"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showEditPlanInfoDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleSavePlanInfo" :loading="savingPlanInfo">
+          保存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -141,6 +213,19 @@ const loading = ref(false)
 const planDetail = ref({})
 const trainingSessions = ref([])
 const activeSession = ref(null)
+
+// 编辑计划信息相关
+const showEditPlanInfoDialog = ref(false)
+const savingPlanInfo = ref(false)
+const editPlanForm = ref({
+  template_name: '',
+  target_goal: '',
+  difficulty_level: '',
+  status: '',
+  start_date: null,
+  end_date: null,
+  notes: ''
+})
 
 // 加载计划详情
 const loadPlanDetail = async () => {
@@ -203,6 +288,17 @@ const loadPlanDetail = async () => {
     )
 
     trainingSessions.value = sessionsWithExercises
+
+    // 5. 初始化编辑表单
+    editPlanForm.value = {
+      template_name: templateData.name,
+      target_goal: templateData.target_goal,
+      difficulty_level: templateData.difficulty_level,
+      status: planData.status,
+      start_date: planData.start_date ? new Date(planData.start_date) : null,
+      end_date: planData.end_date ? new Date(planData.end_date) : null,
+      notes: planData.notes || ''
+    }
   } catch (error) {
     console.error('加载计划详情失败:', error)
     ElMessage.error('加载计划详情失败')
@@ -288,6 +384,49 @@ const handleAddSession = () => {
       planId: planDetail.value.id
     }
   })
+}
+
+// 保存计划信息
+const handleSavePlanInfo = async () => {
+  savingPlanInfo.value = true
+  try {
+    // 1. 更新模板信息
+    const { error: templateError } = await supabase
+      .from('training_templates')
+      .update({
+        name: editPlanForm.value.template_name,
+        target_goal: editPlanForm.value.target_goal,
+        difficulty_level: editPlanForm.value.difficulty_level
+      })
+      .eq('id', planDetail.value.template_id)
+
+    if (templateError) throw templateError
+
+    // 2. 更新计划信息
+    const { error: planError } = await supabase
+      .from('member_plans')
+      .update({
+        status: editPlanForm.value.status,
+        start_date: editPlanForm.value.start_date ? new Date(editPlanForm.value.start_date).toISOString().split('T')[0] : null,
+        end_date: editPlanForm.value.end_date ? new Date(editPlanForm.value.end_date).toISOString().split('T')[0] : null,
+        notes: editPlanForm.value.notes
+      })
+      .eq('id', planDetail.value.id)
+
+    if (planError) throw planError
+
+    ElMessage.success('计划信息保存成功！')
+    showEditPlanInfoDialog.value = false
+
+    // 重新加载计划详情
+    await loadPlanDetail()
+
+  } catch (error) {
+    console.error('保存计划信息失败:', error)
+    ElMessage.error('保存失败：' + error.message)
+  } finally {
+    savingPlanInfo.value = false
+  }
 }
 
 // 取消计划
