@@ -20,6 +20,17 @@
           />
         </el-form-item>
 
+        <el-form-item label="训练日期" required>
+          <el-date-picker
+            v-model="sessionForm.training_date"
+            type="date"
+            placeholder="选择训练日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+
         <!-- 训练动作 -->
         <el-divider content-position="left">
           <span>训练动作</span>
@@ -135,7 +146,8 @@ const saving = ref(false)
 // 课次表单
 const sessionForm = ref({
   core_focus: '',
-  training_part: ''
+  training_part: '',
+  training_date: new Date().toISOString().split('T')[0] // 默认今天
 })
 
 // 动作列表
@@ -255,6 +267,11 @@ const handleSave = async () => {
     return
   }
 
+  if (!sessionForm.value.training_date) {
+    ElMessage.warning('请选择训练日期')
+    return
+  }
+
   if (exercises.value.length === 0) {
     ElMessage.warning('请至少添加一个训练动作')
     return
@@ -277,6 +294,7 @@ const handleSave = async () => {
         session_number: nextSessionNumber.value,
         core_focus: sessionForm.value.core_focus,
         training_part: sessionForm.value.training_part,
+        session_date: sessionForm.value.training_date,
         completed: status.completed,
         completed_date: status.date
       }])
