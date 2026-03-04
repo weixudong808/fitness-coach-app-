@@ -610,7 +610,8 @@ const handleDeletePlan = async (planId) => {
 }
 
 const goBack = () => {
-  router.back()
+  // 返回到会员管理页
+  router.push('/coach/members')
 }
 
 // 监听选择的动作变化
