@@ -82,6 +82,13 @@
                     </template>
                   </el-table-column>
                 </el-table>
+
+                <!-- 编辑课次按钮 -->
+                <div style="margin-top: 15px; text-align: right;">
+                  <el-button type="primary" size="small" @click="handleEditSession(session)">
+                    编辑课次
+                  </el-button>
+                </div>
               </div>
               <el-empty v-else description="暂无训练动作" />
             </el-collapse-item>
@@ -248,6 +255,19 @@ const handleEditPlan = () => {
     name: 'coach-template-edit',
     params: { id: planDetail.value.template_id },
     query: { from: 'plan-detail' }
+  })
+}
+
+// 编辑课次（记录训练）
+const handleEditSession = (session) => {
+  // 跳转到训练模板编辑器，传递模板ID、课次ID和来源标记
+  router.push({
+    name: 'coach-template-edit',
+    params: { id: planDetail.value.template_id },
+    query: {
+      from: 'plan-detail',
+      sessionId: session.id
+    }
   })
 }
 

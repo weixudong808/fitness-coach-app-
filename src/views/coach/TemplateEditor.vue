@@ -161,7 +161,9 @@
 
         <!-- 操作按钮 -->
         <el-form-item style="margin-top: 30px">
-          <el-button type="primary" @click="handleSubmit" :loading="saving">保存模板</el-button>
+          <el-button type="primary" @click="handleSubmit" :loading="saving">
+            {{ isTrainingRecordMode ? '保存记录' : '保存模板' }}
+          </el-button>
           <el-button @click="goBack">取消</el-button>
         </el-form-item>
       </el-form>
@@ -250,6 +252,10 @@ const templateId = ref(null)
 const isExclusiveMode = ref(false)
 const targetMemberId = ref(null)
 const targetMemberName = ref('')
+
+// 训练记录模式（从训练计划详情页编辑课次）
+const isTrainingRecordMode = ref(false)
+const recordingSessionId = ref(null)
 
 // 模板表单数据
 const formData = reactive({
@@ -451,6 +457,76 @@ const handleSubmit = async () => {
           return
         }
 
+        // 如果是训练记录模式，直接更新课次和动作，并标记为已完成
+        if (isTrainingRecordMode.value) {
+          // 更新模板基本信息
+          const templateData = {
+            name: formData.name,
+            description: formData.description,
+            target_goal: formData.target_goal,
+            difficulty_level: formData.difficulty_level,
+            training_stage: formData.training_stage
+          }
+
+          const { error: updateError } = await supabase
+            .from('training_templates')
+            .update(templateData)
+            .eq('id', templateId.value)
+
+          if (updateError) throw updateError
+
+          // 删除旧的训练课次和动作
+          await supabase.from('training_sessions').delete().eq('template_id', templateId.value)
+
+          // 保存训练课次和动作
+          for (const session of trainingSessions.value) {
+            // 判断是否是正在记录的课次
+            const isRecordingSession = session.id === recordingSessionId.value
+
+            // 保存训练课次
+            const { data: sessionData, error: sessionError } = await supabase
+              .from('training_sessions')
+              .insert([{
+                template_id: templateId.value,
+                session_number: session.session_number,
+                core_focus: session.core_focus,
+                training_part: session.training_part,
+                completed: isRecordingSession ? true : (session.completed || false),
+                completed_date: isRecordingSession ? new Date().toISOString().split('T')[0] : (session.completed_date || null)
+              }])
+              .select()
+              .single()
+
+            if (sessionError) throw sessionError
+
+            // 保存该课次的所有动作
+            if (session.exercises.length > 0) {
+              const exercisesData = session.exercises.map((exercise, index) => ({
+                session_id: sessionData.id,
+                exercise_name: exercise.exercise_name,
+                equipment_notes: exercise.equipment_notes,
+                weight: exercise.weight,
+                reps_standard: exercise.reps_standard,
+                sets: exercise.sets,
+                next_goal: exercise.next_goal,
+                member_feedback: exercise.member_feedback,
+                progress_record: exercise.progress_record,
+                order_index: index
+              }))
+
+              const { error: exercisesError } = await supabase
+                .from('session_exercises')
+                .insert(exercisesData)
+
+              if (exercisesError) throw exercisesError
+            }
+          }
+
+          ElMessage.success('训练记录保存成功！')
+          router.back()
+          return
+        }
+
         // 1. 创建或更新训练模板
         const templateData = {
           name: formData.name,
@@ -632,6 +708,12 @@ const loadTemplate = async () => {
 }
 
 onMounted(async () => {
+  // 检查是否为训练记录模式（从训练计划详情页编辑课次）
+  if (route.query.from === 'plan-detail' && route.query.sessionId) {
+    isTrainingRecordMode.value = true
+    recordingSessionId.value = route.query.sessionId
+  }
+
   // 检查是否为专属计划模式
   if (route.query.mode === 'exclusive' && route.query.memberId) {
     isExclusiveMode.value = true
