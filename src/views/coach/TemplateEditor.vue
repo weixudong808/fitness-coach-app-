@@ -813,10 +813,16 @@ onMounted(async () => {
   }
 
   // 如果是编辑模式，加载模板数据
-  if (route.params.id && route.params.id !== 'new') {
+  // 注意：添加课次模式下不加载现有课次
+  if (route.params.id && route.params.id !== 'new' && !isAddSessionMode.value) {
     isEditMode.value = true
     templateId.value = route.params.id
     loadTemplate()
+  }
+
+  // 如果是添加课次模式，只设置 templateId，不加载课次
+  if (isAddSessionMode.value && route.params.id) {
+    templateId.value = route.params.id
   }
 })
 </script>
