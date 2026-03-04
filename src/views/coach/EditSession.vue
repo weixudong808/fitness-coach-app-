@@ -1,9 +1,9 @@
 <template>
-  <div class="add-session-container">
-    <el-page-header @back="goBack" :title="`添加训练课次 - 第${nextSessionNumber}次课`">
+  <div class="edit-session-container">
+    <el-page-header @back="goBack" :title="`编辑训练课次 - 第${sessionNumber}次课`">
     </el-page-header>
 
-    <el-card style="margin-top: 20px">
+    <el-card style="margin-top: 20px" v-loading="loading">
       <el-form :model="sessionForm" label-width="120px">
         <!-- 课次基本信息 -->
         <el-form-item label="本节课核心重点" required>
@@ -48,7 +48,7 @@
 
         <!-- 操作按钮 -->
         <el-form-item style="margin-top: 30px">
-          <el-button type="primary" @click="handleSave" :loading="saving">保存计划</el-button>
+          <el-button type="primary" @click="handleSave" :loading="saving">保存记录</el-button>
           <el-button @click="goBack">取消</el-button>
         </el-form-item>
       </el-form>
@@ -127,9 +127,10 @@ import { selectSessionStatus } from '../../utils/sessionStatus'
 const route = useRoute()
 const router = useRouter()
 
+const sessionId = ref(null)
 const planId = ref(null)
-const templateId = ref(null)
-const nextSessionNumber = ref(1)
+const sessionNumber = ref(1)
+const loading = ref(false)
 const saving = ref(false)
 
 // 课次表单
@@ -172,25 +173,49 @@ const exerciseRules = {
 }
 
 // 查询下一个课次编号
-const loadNextSessionNumber = async () => {
+const loadSessionData = async () => {
+  loading.value = true
   try {
-    const { data: existingSessions, error } = await supabase
+    // 1. 加载课次基本信息
+    const { data: sessionData, error: sessionError } = await supabase
       .from('training_sessions')
-      .select('session_number')
-      .eq('template_id', templateId.value)
-      .order('session_number', { ascending: false })
-      .limit(1)
+      .select('*')
+      .eq('id', sessionId.value)
+      .single()
 
-    if (error) throw error
+    if (sessionError) throw sessionError
 
-    if (existingSessions && existingSessions.length > 0) {
-      nextSessionNumber.value = existingSessions[0].session_number + 1
-    } else {
-      nextSessionNumber.value = 1
-    }
+    // 填充课次表单
+    sessionForm.value.core_focus = sessionData.core_focus
+    sessionForm.value.training_part = sessionData.training_part
+    sessionNumber.value = sessionData.session_number
+
+    // 2. 加载课次的所有动作
+    const { data: exercisesData, error: exercisesError } = await supabase
+      .from('session_exercises')
+      .select('*')
+      .eq('session_id', sessionId.value)
+      .order('order_index', { ascending: true })
+
+    if (exercisesError) throw exercisesError
+
+    exercises.value = exercisesData.map(ex => ({
+      id: ex.id,
+      exercise_name: ex.exercise_name,
+      equipment_notes: ex.equipment_notes || '',
+      weight: ex.weight || '',
+      reps_standard: ex.reps_standard,
+      sets: ex.sets,
+      next_goal: ex.next_goal || '',
+      member_feedback: ex.member_feedback || '',
+      progress_record: ex.progress_record || ''
+    }))
+
   } catch (error) {
-    console.error('查询课次编号失败:', error)
-    ElMessage.error('查询课次编号失败')
+    console.error('加载课次数据失败:', error)
+    ElMessage.error('加载课次数据失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -269,25 +294,30 @@ const handleSave = async () => {
 
   saving.value = true
   try {
-    // 1. 保存训练课次
-    const { data: sessionData, error: sessionError } = await supabase
+    // 1. 更新训练课次
+    const { error: sessionError } = await supabase
       .from('training_sessions')
-      .insert([{
-        template_id: templateId.value,
-        session_number: nextSessionNumber.value,
+      .update({
         core_focus: sessionForm.value.core_focus,
         training_part: sessionForm.value.training_part,
         completed: status.completed,
         completed_date: status.date
-      }])
-      .select()
-      .single()
+      })
+      .eq('id', sessionId.value)
 
     if (sessionError) throw sessionError
 
-    // 2. 保存训练动作
+    // 2. 删除旧的动作
+    const { error: deleteError } = await supabase
+      .from('session_exercises')
+      .delete()
+      .eq('session_id', sessionId.value)
+
+    if (deleteError) throw deleteError
+
+    // 3. 保存新的动作
     const exercisesData = exercises.value.map((exercise, index) => ({
-      session_id: sessionData.id,
+      session_id: sessionId.value,
       exercise_name: exercise.exercise_name,
       equipment_notes: exercise.equipment_notes,
       weight: exercise.weight,
@@ -305,13 +335,10 @@ const handleSave = async () => {
 
     if (exercisesError) throw exercisesError
 
-    ElMessage.success('训练课次添加成功！')
+    ElMessage.success('训练记录保存成功！')
 
     // 返回训练计划详情页
-    router.push({
-      name: 'coach-plan-detail',
-      params: { planId: planId.value }
-    })
+    router.back()
   } catch (error) {
     console.error('保存失败:', error)
     ElMessage.error(`保存失败: ${error.message}`)
@@ -326,22 +353,22 @@ const goBack = () => {
 }
 
 onMounted(async () => {
-  planId.value = route.params.planId
-  templateId.value = route.query.templateId
+  sessionId.value = route.params.sessionId
+  planId.value = route.query.planId
 
-  if (!planId.value || !templateId.value) {
+  if (!sessionId.value || !planId.value) {
     ElMessage.error('参数错误')
     router.back()
     return
   }
 
-  // 查询下一个课次编号
-  await loadNextSessionNumber()
+  // 加载课次数据
+  await loadSessionData()
 })
 </script>
 
 <style scoped>
-.add-session-container {
+.edit-session-container {
   padding: 20px;
 }
 </style>

@@ -64,6 +64,11 @@ const router = createRouter({
           path: 'plans/:planId/add-session',
           name: 'coach-add-session',
           component: () => import('../views/coach/AddSession.vue')
+        },
+        {
+          path: 'sessions/:sessionId/edit',
+          name: 'coach-edit-session',
+          component: () => import('../views/coach/EditSession.vue')
         }
       ]
     },

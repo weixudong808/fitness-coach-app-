@@ -376,14 +376,11 @@ const handleEditPlan = () => {
 
 // 编辑课次（记录训练）
 const handleEditSession = (session) => {
-  // 跳转到训练模板编辑器，传递模板ID、课次ID和来源标记
+  // 跳转到编辑课次页面
   router.push({
-    name: 'coach-template-edit',
-    params: { id: planDetail.value.template_id },
-    query: {
-      from: 'plan-detail',
-      sessionId: session.id
-    }
+    name: 'coach-edit-session',
+    params: { sessionId: session.id },
+    query: { planId: planDetail.value.id }
   })
 }
 
