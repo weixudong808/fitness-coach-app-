@@ -120,20 +120,6 @@
       <!-- 操作按钮 -->
       <div class="action-buttons">
         <el-button @click="goBack">返回</el-button>
-        <el-button
-          type="primary"
-          @click="handleEditPlan"
-        >
-          编辑计划
-        </el-button>
-        <el-button
-          v-if="planDetail.status === 'active'"
-          type="warning"
-          @click="handleCancelPlan"
-        >
-          取消计划
-        </el-button>
-        <el-button type="danger" @click="handleDeletePlan">删除计划</el-button>
       </div>
     </div>
 
@@ -385,17 +371,9 @@ const goBack = () => {
   }
 }
 
-// 编辑计划
-const handleEditPlan = () => {
-  // 跳转到训练模板编辑器，传递模板ID和来源标记
-  router.push({
-    name: 'coach-template-edit',
-    params: { id: planDetail.value.template_id },
-    query: { from: 'plan-detail' }
-  })
-}
-
-// 编辑课次（记录训练）
+onMounted(() => {
+  loadPlanDetail()
+})
 const handleEditSession = (session) => {
   // 跳转到编辑课次页面
   router.push({
@@ -520,44 +498,6 @@ const handleSavePlanInfo = async () => {
     ElMessage.error('保存失败：' + error.message)
   } finally {
     savingPlanInfo.value = false
-  }
-}
-
-// 取消计划
-const handleCancelPlan = async () => {
-  try {
-    await ElMessageBox.confirm('确定要取消这个训练计划吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-
-    await cancelAssignment(route.params.planId)
-    ElMessage.success('已取消训练计划')
-    await loadPlanDetail()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('取消失败：' + error.message)
-    }
-  }
-}
-
-// 删除计划
-const handleDeletePlan = async () => {
-  try {
-    await ElMessageBox.confirm('确定要删除这个训练计划吗？删除后无法恢复。', '警告', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'error'
-    })
-
-    await deleteAssignment(route.params.planId)
-    ElMessage.success('已删除训练计划')
-    router.back()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败：' + error.message)
-    }
   }
 }
 
