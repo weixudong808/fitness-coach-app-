@@ -18,66 +18,68 @@
       </el-alert>
 
       <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
-        <!-- 基本信息 -->
-        <el-divider content-position="left">基本信息</el-divider>
+        <!-- 基本信息 - 添加课次模式下不显示 -->
+        <template v-if="!isAddSessionMode">
+          <el-divider content-position="left">基本信息</el-divider>
 
-        <el-form-item label="模板名称" prop="name">
-          <el-input v-model="formData.name" placeholder="请输入模板名称" />
-        </el-form-item>
+          <el-form-item label="模板名称" prop="name">
+            <el-input v-model="formData.name" placeholder="请输入模板名称" />
+          </el-form-item>
 
-        <el-form-item label="模板描述" prop="description">
-          <el-input
-            v-model="formData.description"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入模板描述"
-          />
-        </el-form-item>
+          <el-form-item label="模板描述" prop="description">
+            <el-input
+              v-model="formData.description"
+              type="textarea"
+              :rows="3"
+              placeholder="请输入模板描述"
+            />
+          </el-form-item>
 
-        <el-form-item label="训练目标" prop="target_goal">
-          <el-input
-            v-model="formData.target_goal"
-            placeholder="请输入训练目标，如：增肌、减脂、塑形等"
-            clearable
-          >
-            <template #append>
-              <el-dropdown @command="handleGoalSelect">
-                <el-button>
-                  常用选项
-                  <el-icon class="el-icon--right"><arrow-down /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="增肌">增肌</el-dropdown-item>
-                    <el-dropdown-item command="减脂">减脂</el-dropdown-item>
-                    <el-dropdown-item command="塑形">塑形</el-dropdown-item>
-                    <el-dropdown-item command="力量">力量</el-dropdown-item>
-                    <el-dropdown-item command="耐力">耐力</el-dropdown-item>
-                    <el-dropdown-item command="综合">综合</el-dropdown-item>
-                    <el-dropdown-item command="康复训练">康复训练</el-dropdown-item>
-                    <el-dropdown-item command="体能提升">体能提升</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </template>
-          </el-input>
-        </el-form-item>
+          <el-form-item label="训练目标" prop="target_goal">
+            <el-input
+              v-model="formData.target_goal"
+              placeholder="请输入训练目标，如：增肌、减脂、塑形等"
+              clearable
+            >
+              <template #append>
+                <el-dropdown @command="handleGoalSelect">
+                  <el-button>
+                    常用选项
+                    <el-icon class="el-icon--right"><arrow-down /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="增肌">增肌</el-dropdown-item>
+                      <el-dropdown-item command="减脂">减脂</el-dropdown-item>
+                      <el-dropdown-item command="塑形">塑形</el-dropdown-item>
+                      <el-dropdown-item command="力量">力量</el-dropdown-item>
+                      <el-dropdown-item command="耐力">耐力</el-dropdown-item>
+                      <el-dropdown-item command="综合">综合</el-dropdown-item>
+                      <el-dropdown-item command="康复训练">康复训练</el-dropdown-item>
+                      <el-dropdown-item command="体能提升">体能提升</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </template>
+            </el-input>
+          </el-form-item>
 
-        <el-form-item label="训练阶段" prop="training_stage">
-          <el-select v-model="formData.training_stage" placeholder="请选择训练阶段">
-            <el-option label="基础期" value="基础期" />
-            <el-option label="进阶期" value="进阶期" />
-            <el-option label="突破期" value="突破期" />
-          </el-select>
-        </el-form-item>
+          <el-form-item label="训练阶段" prop="training_stage">
+            <el-select v-model="formData.training_stage" placeholder="请选择训练阶段">
+              <el-option label="基础期" value="基础期" />
+              <el-option label="进阶期" value="进阶期" />
+              <el-option label="突破期" value="突破期" />
+            </el-select>
+          </el-form-item>
 
-        <el-form-item label="难度等级" prop="difficulty_level">
-          <el-select v-model="formData.difficulty_level" placeholder="请选择难度等级">
-            <el-option label="初级" value="beginner" />
-            <el-option label="中级" value="intermediate" />
-            <el-option label="高级" value="advanced" />
-          </el-select>
-        </el-form-item>
+          <el-form-item label="难度等级" prop="difficulty_level">
+            <el-select v-model="formData.difficulty_level" placeholder="请选择难度等级">
+              <el-option label="初级" value="beginner" />
+              <el-option label="中级" value="intermediate" />
+              <el-option label="高级" value="advanced" />
+            </el-select>
+          </el-form-item>
+        </template>
 
         <!-- 训练课次安排 -->
         <el-divider content-position="left">
@@ -445,6 +447,71 @@ const resetExerciseForm = () => {
 const handleSubmit = async () => {
   if (!formRef.value) return
 
+  // 添加课次模式下不需要验证基本信息
+  if (isAddSessionMode.value) {
+    if (trainingSessions.value.length === 0) {
+      ElMessage.warning('请至少添加一个训练课次')
+      return
+    }
+
+    saving.value = true
+    try {
+      // 保存新添加的课次和动作
+      for (const session of trainingSessions.value) {
+        // 保存训练课次
+        const { data: sessionData, error: sessionError } = await supabase
+          .from('training_sessions')
+          .insert([{
+            template_id: templateId.value,
+            session_number: session.session_number,
+            core_focus: session.core_focus,
+            training_part: session.training_part,
+            completed: false,
+            completed_date: null
+          }])
+          .select()
+          .single()
+
+        if (sessionError) throw sessionError
+
+        // 保存该课次的所有动作
+        if (session.exercises.length > 0) {
+          const exercisesData = session.exercises.map((exercise, index) => ({
+            session_id: sessionData.id,
+            exercise_name: exercise.exercise_name,
+            equipment_notes: exercise.equipment_notes,
+            weight: exercise.weight,
+            reps_standard: exercise.reps_standard,
+            sets: exercise.sets,
+            next_goal: exercise.next_goal,
+            member_feedback: exercise.member_feedback,
+            progress_record: exercise.progress_record,
+            order_index: index
+          }))
+
+          const { error: exercisesError } = await supabase
+            .from('session_exercises')
+            .insert(exercisesData)
+
+          if (exercisesError) throw exercisesError
+        }
+      }
+
+      ElMessage.success('训练课次添加成功！')
+      // 返回训练计划详情页
+      router.push({
+        name: 'coach-plan-detail',
+        params: { planId: targetPlanId.value }
+      })
+    } catch (error) {
+      console.error('保存失败:', error)
+      ElMessage.error(`保存失败: ${error.message}`)
+    } finally {
+      saving.value = false
+    }
+    return
+  }
+
   await formRef.value.validate(async (valid) => {
     if (valid) {
       if (trainingSessions.value.length === 0) {
@@ -528,58 +595,6 @@ const handleSubmit = async () => {
 
           ElMessage.success('训练记录保存成功！')
           router.back()
-          return
-        }
-
-        // 如果是添加课次模式，只添加新课次到现有模板
-        if (isAddSessionMode.value) {
-          // 保存新添加的课次和动作
-          for (const session of trainingSessions.value) {
-            // 保存训练课次
-            const { data: sessionData, error: sessionError } = await supabase
-              .from('training_sessions')
-              .insert([{
-                template_id: templateId.value,
-                session_number: session.session_number,
-                core_focus: session.core_focus,
-                training_part: session.training_part,
-                completed: false,
-                completed_date: null
-              }])
-              .select()
-              .single()
-
-            if (sessionError) throw sessionError
-
-            // 保存该课次的所有动作
-            if (session.exercises.length > 0) {
-              const exercisesData = session.exercises.map((exercise, index) => ({
-                session_id: sessionData.id,
-                exercise_name: exercise.exercise_name,
-                equipment_notes: exercise.equipment_notes,
-                weight: exercise.weight,
-                reps_standard: exercise.reps_standard,
-                sets: exercise.sets,
-                next_goal: exercise.next_goal,
-                member_feedback: exercise.member_feedback,
-                progress_record: exercise.progress_record,
-                order_index: index
-              }))
-
-              const { error: exercisesError } = await supabase
-                .from('session_exercises')
-                .insert(exercisesData)
-
-              if (exercisesError) throw exercisesError
-            }
-          }
-
-          ElMessage.success('训练课次添加成功！')
-          // 返回训练计划详情页
-          router.push({
-            name: 'coach-plan-detail',
-            params: { planId: targetPlanId.value }
-          })
           return
         }
 
