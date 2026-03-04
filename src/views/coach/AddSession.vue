@@ -17,6 +17,7 @@
           <el-input
             v-model="sessionForm.training_part"
             placeholder="请输入训练部位，如：胸、背、腿等"
+            style="width: 50%"
           />
         </el-form-item>
 
@@ -27,7 +28,7 @@
             placeholder="选择训练日期"
             format="YYYY-MM-DD"
             value-format="YYYY-MM-DD"
-            style="width: 100%"
+            style="width: 50%"
           />
         </el-form-item>
 
