@@ -362,7 +362,13 @@ const getDifficultyLabel = (level) => {
 
 // 返回
 const goBack = () => {
-  router.back()
+  // 返回到会员详情页
+  if (planDetail.value.member_id) {
+    router.push(`/coach/members/${planDetail.value.member_id}`)
+  } else {
+    // 如果没有 member_id，使用浏览器返回
+    router.back()
+  }
 }
 
 // 编辑计划
