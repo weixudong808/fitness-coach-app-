@@ -324,9 +324,31 @@ const exerciseRules = {
 }
 
 // 添加训练课次
-const addTrainingSession = () => {
+const addTrainingSession = async () => {
+  let nextSessionNumber = trainingSessions.value.length + 1
+
+  // 如果是添加课次模式，需要查询现有课次的最大编号
+  if (isAddSessionMode.value && templateId.value) {
+    try {
+      const { data: existingSessions, error } = await supabase
+        .from('training_sessions')
+        .select('session_number')
+        .eq('template_id', templateId.value)
+        .order('session_number', { ascending: false })
+        .limit(1)
+
+      if (error) throw error
+
+      if (existingSessions && existingSessions.length > 0) {
+        nextSessionNumber = existingSessions[0].session_number + 1
+      }
+    } catch (error) {
+      console.error('查询现有课次失败:', error)
+    }
+  }
+
   trainingSessions.value.push({
-    session_number: trainingSessions.value.length + 1,
+    session_number: nextSessionNumber,
     core_focus: '',
     training_part: '',
     exercises: []
