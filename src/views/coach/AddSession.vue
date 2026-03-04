@@ -13,24 +13,28 @@
           />
         </el-form-item>
 
-        <el-form-item label="训练部位" required>
-          <el-input
-            v-model="sessionForm.training_part"
-            placeholder="请输入训练部位，如：胸、背、腿等"
-            style="width: 50%"
-          />
-        </el-form-item>
-
-        <el-form-item label="训练日期" required>
-          <el-date-picker
-            v-model="sessionForm.training_date"
-            type="date"
-            placeholder="选择训练日期"
-            format="YYYY-MM-DD"
-            value-format="YYYY-MM-DD"
-            style="width: 50%"
-          />
-        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="训练部位" required>
+              <el-input
+                v-model="sessionForm.training_part"
+                placeholder="请输入训练部位，如：胸、背、腿等"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="训练日期" required>
+              <el-date-picker
+                v-model="sessionForm.training_date"
+                type="date"
+                placeholder="选择训练日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
 
         <!-- 训练动作 -->
         <el-divider content-position="left">
