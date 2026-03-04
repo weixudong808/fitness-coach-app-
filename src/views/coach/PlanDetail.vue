@@ -52,7 +52,7 @@
                     <el-tag type="primary" size="small">第{{ session.session_number }}次课</el-tag>
                     <span style="margin-left: 10px; font-weight: bold;">{{ session.core_focus }}</span>
                     <el-tag v-if="session.completed" type="success" size="small" style="margin-left: 10px;">
-                      已完成 {{ formatDate(session.completed_date) }}
+                      已完成
                     </el-tag>
                     <el-tag v-else type="info" size="small" style="margin-left: 10px;">
                       待训练
