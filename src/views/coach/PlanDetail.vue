@@ -232,6 +232,7 @@ const loadPlanDetail = async () => {
   loading.value = true
   try {
     const planId = route.params.planId
+    console.log('正在加载计划详情，planId:', planId)
 
     // 1. 查询计划基本信息
     const { data: planData, error: planError } = await supabase
@@ -240,7 +241,12 @@ const loadPlanDetail = async () => {
       .eq('id', planId)
       .single()
 
-    if (planError) throw planError
+    if (planError) {
+      console.error('查询计划失败:', planError)
+      throw planError
+    }
+
+    console.log('计划数据:', planData)
 
     // 2. 查询模板基本信息
     const { data: templateData, error: templateError } = await supabase
