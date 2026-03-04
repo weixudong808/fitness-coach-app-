@@ -248,17 +248,8 @@ const loadMemberDetail = async () => {
 const loadTrainingStats = async () => {
   loadingStats.value = true
   try {
-    const memberId = route.params.id
-
-    // 1. 查询会员的所有训练计划
-    const { data: memberPlans, error: plansError } = await supabase
-      .from('member_plans')
-      .select('template_id')
-      .eq('member_id', memberId)
-
-    if (plansError) throw plansError
-
-    if (!memberPlans || memberPlans.length === 0) {
+    // 1. 使用已加载的训练计划数据，避免重复查询
+    if (!memberPlans.value || memberPlans.value.length === 0) {
       trainingStats.value = {
         totalSessions: 0,
         monthSessions: 0,
@@ -269,10 +260,10 @@ const loadTrainingStats = async () => {
     }
 
     // 2. 查询所有已完成的训练课次
-    const templateIds = memberPlans.map(p => p.template_id)
+    const templateIds = memberPlans.value.map(p => p.template_id)
     const { data: completedSessions, error: sessionsError } = await supabase
       .from('training_sessions')
-      .select('*')
+      .select('id, template_id, completed, completed_date, session_date')
       .in('template_id', templateIds)
       .eq('completed', true)
       .order('completed_date', { ascending: true })
@@ -337,7 +328,7 @@ const loadExerciseProgress = async (completedSessions) => {
 
     const { data: exercises, error } = await supabase
       .from('session_exercises')
-      .select('*')
+      .select('session_id, exercise_name, weight, reps_standard, sets')
       .in('session_id', sessionIds)
 
     if (error) throw error
@@ -346,6 +337,12 @@ const loadExerciseProgress = async (completedSessions) => {
       exerciseProgressData.value = []
       return
     }
+
+    // 优化：使用 Map 进行 O(1) 查找，而不是 O(n) 的 find
+    const sessionMap = new Map()
+    completedSessions.forEach(session => {
+      sessionMap.set(session.id, session)
+    })
 
     // 按动作名称分组并整理进步数据
     const progressByExercise = {}
@@ -357,8 +354,8 @@ const loadExerciseProgress = async (completedSessions) => {
         progressByExercise[exerciseName] = []
       }
 
-      // 找到对应的训练日期
-      const session = completedSessions.find(s => s.id === exercise.session_id)
+      // 使用 Map 进行 O(1) 查找
+      const session = sessionMap.get(exercise.session_id)
       if (session && session.completed_date) {
         // 提取重量数值（去除单位）
         const weightMatch = exercise.weight?.match(/(\d+(\.\d+)?)/)

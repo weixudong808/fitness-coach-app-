@@ -285,23 +285,34 @@ const loadPlanDetail = async () => {
 
     if (sessionsError) throw sessionsError
 
-    // 4. 为每个课次加载训练动作（使用新表 session_exercises）
-    const sessionsWithExercises = await Promise.all(
-      sessionsData.map(async (session) => {
-        const { data: exercises, error: exercisesError } = await supabase
-          .from('session_exercises')
-          .select('*')
-          .eq('session_id', session.id)
-          .order('order_index', { ascending: true })
+    // 4. 一次性加载所有课次的训练动作（优化：避免 N+1 查询）
+    const sessionIds = sessionsData.map(s => s.id)
+    const { data: allExercises, error: exercisesError } = await supabase
+      .from('session_exercises')
+      .select('*')
+      .in('session_id', sessionIds)
+      .order('order_index', { ascending: true })
 
-        if (exercisesError) {
-          console.error('加载训练动作失败:', exercisesError)
-          return { ...session, exercises: [] }
+    if (exercisesError) {
+      console.error('加载训练动作失败:', exercisesError)
+    }
+
+    // 5. 将动作按课次分组
+    const exercisesBySession = {}
+    if (allExercises) {
+      allExercises.forEach(exercise => {
+        if (!exercisesBySession[exercise.session_id]) {
+          exercisesBySession[exercise.session_id] = []
         }
-
-        return { ...session, exercises: exercises || [] }
+        exercisesBySession[exercise.session_id].push(exercise)
       })
-    )
+    }
+
+    // 6. 组合课次和动作数据
+    const sessionsWithExercises = sessionsData.map(session => ({
+      ...session,
+      exercises: exercisesBySession[session.id] || []
+    }))
 
     trainingSessions.value = sessionsWithExercises
 
