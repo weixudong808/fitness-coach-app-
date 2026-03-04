@@ -58,6 +58,15 @@
                       待训练
                     </el-tag>
                   </div>
+                  <div style="margin-left: auto;">
+                    <el-button
+                      size="small"
+                      type="danger"
+                      @click.stop="handleDeleteSession(session)"
+                    >
+                      删除
+                    </el-button>
+                  </div>
                 </div>
               </template>
 
@@ -386,6 +395,71 @@ const handleAddSession = () => {
     params: { planId: planDetail.value.id },
     query: { templateId: planDetail.value.template_id }
   })
+}
+
+// 删除训练课次
+const handleDeleteSession = async (session) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除"第${session.session_number}次课 - ${session.core_focus}"吗？删除后无法恢复。`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    loading.value = true
+
+    // 1. 删除课次的所有动作
+    const { error: deleteExercisesError } = await supabase
+      .from('session_exercises')
+      .delete()
+      .eq('session_id', session.id)
+
+    if (deleteExercisesError) throw deleteExercisesError
+
+    // 2. 删除课次
+    const { error: deleteSessionError } = await supabase
+      .from('training_sessions')
+      .delete()
+      .eq('id', session.id)
+
+    if (deleteSessionError) throw deleteSessionError
+
+    // 3. 查询同一模板下的所有剩余课次
+    const { data: remainingSessions, error: queryError } = await supabase
+      .from('training_sessions')
+      .select('id, session_number')
+      .eq('template_id', planDetail.value.template_id)
+      .order('session_number', { ascending: true })
+
+    if (queryError) throw queryError
+
+    // 4. 重新编号
+    for (let i = 0; i < remainingSessions.length; i++) {
+      const { error: updateError } = await supabase
+        .from('training_sessions')
+        .update({ session_number: i + 1 })
+        .eq('id', remainingSessions[i].id)
+
+      if (updateError) throw updateError
+    }
+
+    ElMessage.success('课次删除成功')
+
+    // 5. 刷新页面
+    await loadPlanDetail()
+
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除课次失败:', error)
+      ElMessage.error('删除课次失败')
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
 // 保存计划信息
