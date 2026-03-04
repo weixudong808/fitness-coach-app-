@@ -101,12 +101,12 @@
           />
         </el-form-item>
 
-        <el-form-item label="会员反馈" prop="member_feedback">
+        <el-form-item label="教练评语" prop="coach_comment">
           <el-input
-            v-model="exerciseForm.member_feedback"
+            v-model="exerciseForm.coach_comment"
             type="textarea"
             :rows="2"
-            placeholder="请输入会员反馈"
+            placeholder="请输入教练评语"
           />
         </el-form-item>
 
@@ -166,7 +166,7 @@ const exerciseForm = ref({
   reps_standard: '',
   sets: 3,
   next_goal: '',
-  member_feedback: '',
+  coach_comment: '',
   progress_record: ''
 })
 
@@ -246,7 +246,7 @@ const handleExerciseSubmit = async () => {
         reps_standard: '',
         sets: 3,
         next_goal: '',
-        member_feedback: '',
+        coach_comment: '',
         progress_record: ''
       }
       exerciseFormRef.value?.resetFields()
@@ -312,7 +312,7 @@ const handleSave = async () => {
       reps_standard: exercise.reps_standard,
       sets: exercise.sets,
       next_goal: exercise.next_goal,
-      member_feedback: exercise.member_feedback,
+      coach_comment: exercise.coach_comment,
       progress_record: exercise.progress_record,
       order_index: index
     }))
