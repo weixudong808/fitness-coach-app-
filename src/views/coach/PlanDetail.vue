@@ -363,10 +363,13 @@ const getDifficultyLabel = (level) => {
 // 返回
 const goBack = () => {
   // 返回到会员详情页
-  if (planDetail.value.member_id) {
+  console.log('点击返回，planDetail:', planDetail.value)
+  console.log('member_id:', planDetail.value?.member_id)
+
+  if (planDetail.value?.member_id) {
     router.push(`/coach/members/${planDetail.value.member_id}`)
   } else {
-    // 如果没有 member_id，使用浏览器返回
+    console.warn('member_id 不存在，使用浏览器返回')
     router.back()
   }
 }
