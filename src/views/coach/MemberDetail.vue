@@ -434,13 +434,12 @@ const progressChartOption = computed(() => {
 
   const dates = exerciseData.data.map(d => new Date(d.date).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }))
   const weights = exerciseData.data.map(d => {
-    // 尝试从字符串中提取数字
-    const match = d.weight?.match(/(\d+\.?\d*)/);
-    return match ? parseFloat(match[1]) : null
+    // weight 已经是数字类型，直接使用
+    return d.weight || 0
   })
   const reps = exerciseData.data.map(d => {
-    const match = d.reps?.match(/(\d+)/);
-    return match ? parseInt(match[1]) : null
+    // reps 已经是数字类型，直接使用
+    return d.reps || 0
   })
 
   return {
