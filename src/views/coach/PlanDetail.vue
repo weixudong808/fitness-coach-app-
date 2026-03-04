@@ -380,15 +380,11 @@ const handleEditSession = (session) => {
 
 // 添加训练课次
 const handleAddSession = () => {
-  // 跳转到添加课次页面，传递模板ID和计划ID
+  // 跳转到添加课次页面
   router.push({
-    name: 'coach-template-edit',
-    params: { id: planDetail.value.template_id },
-    query: {
-      from: 'plan-detail',
-      mode: 'add-session',
-      planId: planDetail.value.id
-    }
+    name: 'coach-add-session',
+    params: { planId: planDetail.value.id },
+    query: { templateId: planDetail.value.template_id }
   })
 }
 

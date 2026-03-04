@@ -59,6 +59,11 @@ const router = createRouter({
           path: 'plans/:planId',
           name: 'coach-plan-detail',
           component: () => import('../views/coach/PlanDetail.vue')
+        },
+        {
+          path: 'plans/:planId/add-session',
+          name: 'coach-add-session',
+          component: () => import('../views/coach/AddSession.vue')
         }
       ]
     },
