@@ -203,9 +203,9 @@
           <el-input v-model="exerciseForm.next_goal" placeholder="如：维持并加重、小目标/无" />
         </el-form-item>
 
-        <el-form-item label="会员反馈">
+        <el-form-item label="教练评语">
           <el-input
-            v-model="exerciseForm.member_feedback"
+            v-model="exerciseForm.coach_comment"
             type="textarea"
             :rows="2"
             placeholder="发力/难度/感受"
@@ -284,7 +284,7 @@ const exerciseForm = reactive({
   reps_standard: '',
   sets: 3,
   next_goal: '',
-  member_feedback: '',
+  coach_comment: '',
   progress_record: ''
 })
 
@@ -378,7 +378,7 @@ const addExercise = (sessionIndex) => {
   exerciseForm.reps_standard = ''
   exerciseForm.sets = 3
   exerciseForm.next_goal = ''
-  exerciseForm.member_feedback = ''
+  exerciseForm.coach_comment = ''
   exerciseForm.progress_record = ''
   exerciseFormRef.value?.resetFields()
   showExerciseDialog.value = true
@@ -423,7 +423,7 @@ const handleExerciseSubmit = async () => {
           reps_standard: exerciseForm.reps_standard,
           sets: exerciseForm.sets,
           next_goal: exerciseForm.next_goal,
-          member_feedback: exerciseForm.member_feedback,
+          coach_comment: exerciseForm.coach_comment,
           progress_record: exerciseForm.progress_record
         })
         ElMessage.success('动作已更新')
@@ -436,7 +436,7 @@ const handleExerciseSubmit = async () => {
           reps_standard: exerciseForm.reps_standard,
           sets: exerciseForm.sets,
           next_goal: exerciseForm.next_goal,
-          member_feedback: exerciseForm.member_feedback,
+          coach_comment: exerciseForm.coach_comment,
           progress_record: exerciseForm.progress_record,
           order_index: trainingSessions.value[sessionIndex].exercises.length
         })
@@ -458,7 +458,7 @@ const resetExerciseForm = () => {
     reps_standard: '',
     sets: 3,
     next_goal: '',
-    member_feedback: '',
+    coach_comment: '',
     progress_record: ''
   })
   editingExercise.sessionIndex = null
@@ -507,7 +507,7 @@ const handleSubmit = async () => {
             reps_standard: exercise.reps_standard,
             sets: exercise.sets,
             next_goal: exercise.next_goal,
-            member_feedback: exercise.member_feedback,
+            coach_comment: exercise.coach_comment,
             progress_record: exercise.progress_record,
             order_index: index
           }))
@@ -603,7 +603,7 @@ const handleSubmit = async () => {
                 reps_standard: exercise.reps_standard,
                 sets: exercise.sets,
                 next_goal: exercise.next_goal,
-                member_feedback: exercise.member_feedback,
+                coach_comment: exercise.coach_comment,
                 progress_record: exercise.progress_record,
                 order_index: index
               }))
@@ -684,7 +684,7 @@ const handleSubmit = async () => {
               reps_standard: exercise.reps_standard,
               sets: exercise.sets,
               next_goal: exercise.next_goal,
-              member_feedback: exercise.member_feedback,
+              coach_comment: exercise.coach_comment,
               progress_record: exercise.progress_record,
               order_index: index
             }))
@@ -742,6 +742,11 @@ const handleSubmit = async () => {
 // 返回
 const goBack = () => {
   router.back()
+}
+
+// 训练目标下拉选择
+const handleGoalSelect = (command) => {
+  formData.target_goal = command
 }
 
 // 加载模板数据
