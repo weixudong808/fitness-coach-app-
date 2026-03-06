@@ -377,7 +377,11 @@ const loadTrainingStats = async () => {
       const date = new Date()
       date.setDate(date.getDate() - i)
       const dateStr = date.toISOString().split('T')[0]
-      const count = completedSessions.filter(s => s.completed_date === dateStr).length
+      // 修复：比较日期时只取日期部分，忽略时间
+      const count = completedSessions.filter(s => {
+        const sessionDate = s.completed_date ? s.completed_date.split('T')[0] : ''
+        return sessionDate === dateStr
+      }).length
       last30Days.push({
         date: `${date.getMonth() + 1}/${date.getDate()}`,
         count
