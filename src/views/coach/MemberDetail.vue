@@ -454,7 +454,7 @@ const loadExerciseProgress = async (completedSessions) => {
 
       // 使用 Map 进行 O(1) 查找
       const session = sessionMap.get(exercise.session_id)
-      if (session && session.completed_date) {
+      if (session && session.session_date) {
         // 提取重量数值（去除单位）
         const weightMatch = exercise.weight?.match(/(\d+(\.\d+)?)/)
         const weight = weightMatch ? parseFloat(weightMatch[1]) : 0
@@ -464,7 +464,7 @@ const loadExerciseProgress = async (completedSessions) => {
         const reps = repsMatch ? parseInt(repsMatch[1]) : 0
 
         progressByExercise[exerciseName].push({
-          date: session.completed_date,
+          date: session.session_date,
           weight: weight,
           reps: reps,
           sets: exercise.sets || 0
