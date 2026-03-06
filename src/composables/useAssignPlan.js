@@ -72,6 +72,103 @@ export function useAssignPlan() {
     }
   }
 
+  // 深度复制模板（包括所有课次和动作）
+  const deepCopyTemplate = async (sourceTemplateId, memberId, coachId) => {
+    try {
+      // 1. 查询源模板信息
+      const { data: sourceTemplate, error: templateError } = await supabase
+        .from('training_templates')
+        .select('*')
+        .eq('id', sourceTemplateId)
+        .single()
+
+      if (templateError) throw templateError
+
+      // 2. 创建专属计划（复制模板基本信息）
+      const { data: newTemplate, error: createError } = await supabase
+        .from('training_templates')
+        .insert([{
+          name: sourceTemplate.name,
+          description: sourceTemplate.description,
+          target_goal: sourceTemplate.target_goal,
+          difficulty_level: sourceTemplate.difficulty_level,
+          training_stage: sourceTemplate.training_stage,
+          coach_id: coachId,
+          is_template: false,  // 标记为专属计划
+          member_id: memberId  // 关联会员
+        }])
+        .select()
+        .single()
+
+      if (createError) throw createError
+
+      // 3. 查询源模板的所有课次
+      const { data: sourceSessions, error: sessionsError } = await supabase
+        .from('training_sessions')
+        .select('*')
+        .eq('template_id', sourceTemplateId)
+        .order('session_number', { ascending: true })
+
+      if (sessionsError) throw sessionsError
+
+      // 4. 复制所有课次和动作
+      if (sourceSessions && sourceSessions.length > 0) {
+        for (const session of sourceSessions) {
+          // 插入新课次
+          const { data: newSession, error: sessionError } = await supabase
+            .from('training_sessions')
+            .insert([{
+              template_id: newTemplate.id,
+              session_number: session.session_number,
+              core_focus: session.core_focus,
+              training_part: session.training_part,
+              completed: false,
+              completed_date: null
+            }])
+            .select()
+            .single()
+
+          if (sessionError) throw sessionError
+
+          // 5. 查询并复制该课次的所有动作
+          const { data: sourceExercises, error: exercisesError } = await supabase
+            .from('session_exercises')
+            .select('*')
+            .eq('session_id', session.id)
+            .order('order_index', { ascending: true })
+
+          if (exercisesError) throw exercisesError
+
+          if (sourceExercises && sourceExercises.length > 0) {
+            // 批量插入动作
+            const newExercises = sourceExercises.map(exercise => ({
+              session_id: newSession.id,
+              exercise_name: exercise.exercise_name,
+              equipment_notes: exercise.equipment_notes,
+              weight: exercise.weight,
+              reps_standard: exercise.reps_standard,
+              sets: exercise.sets,
+              next_goal: exercise.next_goal,
+              coach_comment: exercise.coach_comment,
+              order_index: exercise.order_index
+            }))
+
+            const { error: insertExercisesError } = await supabase
+              .from('session_exercises')
+              .insert(newExercises)
+
+            if (insertExercisesError) throw insertExercisesError
+          }
+        }
+      }
+
+      return newTemplate.id
+    } catch (error) {
+      console.error('深度复制模板失败:', error)
+      throw error
+    }
+  }
+
   // 分配训练计划（支持批量分配）
   const assignPlan = async (memberIds, templateId, startDate, notes) => {
     loading.value = true
@@ -79,24 +176,36 @@ export function useAssignPlan() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('未登录')
 
-      // 构建批量插入数据
-      const plans = memberIds.map(memberId => ({
-        member_id: memberId,
-        template_id: templateId,
-        coach_id: user.id,
-        start_date: startDate,
-        status: 'active',
-        notes: notes || null
-      }))
+      let successCount = 0
 
-      // 批量插入
-      const { error } = await supabase
-        .from('member_plans')
-        .insert(plans)
+      // 为每个会员创建专属计划副本
+      for (const memberId of memberIds) {
+        try {
+          // 1. 深度复制模板
+          const newTemplateId = await deepCopyTemplate(templateId, memberId, user.id)
 
-      if (error) throw error
+          // 2. 在 member_plans 中创建分配记录
+          const { error: assignError } = await supabase
+            .from('member_plans')
+            .insert([{
+              member_id: memberId,
+              template_id: newTemplateId,  // 使用新创建的专属计划ID
+              coach_id: user.id,
+              start_date: startDate,
+              status: 'active',
+              notes: notes || null
+            }])
 
-      return plans.length
+          if (assignError) throw assignError
+
+          successCount++
+        } catch (error) {
+          console.error(`为会员 ${memberId} 分配计划失败:`, error)
+          // 继续处理下一个会员
+        }
+      }
+
+      return successCount
     } catch (error) {
       console.error('分配训练计划失败:', error)
       throw error

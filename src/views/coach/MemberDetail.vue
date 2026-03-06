@@ -5,7 +5,10 @@
     <el-card v-loading="loading" style="margin-top: 20px">
       <template #header>
         <div class="card-header">
-          <h3>{{ member?.name }}</h3>
+          <h3>会员信息</h3>
+          <el-button type="primary" size="small" @click="handleEditMember">
+            编辑
+          </el-button>
         </div>
       </template>
 
@@ -165,11 +168,60 @@
         <el-empty v-else description="暂无训练数据" />
       </div>
     </el-card>
+
+    <!-- 编辑会员对话框 -->
+    <el-dialog
+      v-model="showEditDialog"
+      title="编辑会员信息"
+      width="600px"
+    >
+      <el-form :model="memberForm" :rules="memberRules" ref="memberFormRef" label-width="120px">
+        <el-form-item label="姓名" prop="name">
+          <el-input v-model="memberForm.name" placeholder="请输入姓名" />
+        </el-form-item>
+
+        <el-form-item label="性别" prop="gender">
+          <el-radio-group v-model="memberForm.gender">
+            <el-radio value="male">男</el-radio>
+            <el-radio value="female">女</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="年龄" prop="age">
+          <el-input-number v-model="memberForm.age" :min="1" :max="120" />
+        </el-form-item>
+
+        <el-form-item label="电话" prop="phone">
+          <el-input v-model="memberForm.phone" placeholder="请输入电话" />
+        </el-form-item>
+
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="memberForm.email" placeholder="请输入邮箱（选填）" />
+        </el-form-item>
+
+        <el-form-item label="身高(cm)" prop="height">
+          <el-input-number v-model="memberForm.height" :min="100" :max="250" />
+        </el-form-item>
+
+        <el-form-item label="初始体重(kg)" prop="initial_weight">
+          <el-input-number v-model="memberForm.initial_weight" :min="30" :max="300" :precision="1" />
+        </el-form-item>
+
+        <el-form-item label="初始体脂率(%)" prop="initial_body_fat">
+          <el-input-number v-model="memberForm.initial_body_fat" :min="5" :max="60" :precision="1" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showEditDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveMember" :loading="saving">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Document, Edit } from '@element-plus/icons-vue'
@@ -204,6 +256,30 @@ const { getMemberPlans, cancelAssignment, deleteAssignment } = useAssignPlan()
 const member = ref(null)
 const memberPlans = ref([])
 const loading = ref(false)
+
+// 编辑会员相关
+const showEditDialog = ref(false)
+const saving = ref(false)
+const memberFormRef = ref(null)
+const memberForm = reactive({
+  name: '',
+  gender: 'male',
+  age: null,
+  phone: '',
+  email: '',
+  height: null,
+  initial_weight: null,
+  initial_body_fat: null
+})
+
+const memberRules = {
+  name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+  gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
+  age: [{ required: true, message: '请输入年龄', trigger: 'blur' }],
+  phone: [{ required: true, message: '请输入电话', trigger: 'blur' }],
+  height: [{ required: true, message: '请输入身高', trigger: 'blur' }],
+  initial_weight: [{ required: true, message: '请输入初始体重', trigger: 'blur' }]
+}
 
 // 进步统计相关
 const loadingStats = ref(false)
@@ -608,6 +684,57 @@ const handleDeletePlan = async (planId) => {
 const goBack = () => {
   // 返回到会员管理页
   router.push('/coach/members')
+}
+
+// 编辑会员
+const handleEditMember = () => {
+  if (!member.value) {
+    ElMessage.warning('会员信息加载中，请稍后再试')
+    return
+  }
+
+  // 填充表单数据
+  Object.assign(memberForm, {
+    name: member.value.name,
+    gender: member.value.gender,
+    age: member.value.age,
+    phone: member.value.phone,
+    email: member.value.email || '',
+    height: member.value.height,
+    initial_weight: member.value.initial_weight,
+    initial_body_fat: member.value.initial_body_fat
+  })
+  showEditDialog.value = true
+}
+
+// 保存会员信息
+const saveMember = async () => {
+  if (!memberFormRef.value) return
+
+  await memberFormRef.value.validate(async (valid) => {
+    if (valid) {
+      saving.value = true
+      try {
+        const { error } = await supabase
+          .from('members')
+          .update(memberForm)
+          .eq('id', route.params.id)
+
+        if (error) throw error
+
+        ElMessage.success('更新成功')
+        showEditDialog.value = false
+
+        // 刷新会员信息
+        await loadMemberDetail()
+      } catch (error) {
+        console.error('保存失败:', error)
+        ElMessage.error(`保存失败: ${error.message || JSON.stringify(error)}`)
+      } finally {
+        saving.value = false
+      }
+    }
+  })
 }
 
 // 监听选择的动作变化

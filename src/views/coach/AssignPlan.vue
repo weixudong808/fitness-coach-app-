@@ -378,6 +378,15 @@ const handleAssign = async () => {
 
     ElMessage.success(`成功为 ${count} 个会员分配训练计划`)
 
+    // 检查是否从会员详情页跳转过来
+    const memberId = route.query.memberId
+    if (memberId) {
+      // 如果有 memberId，跳转回会员详情页
+      router.push(`/coach/members/${memberId}`)
+      return
+    }
+
+    // 如果没有 memberId，保持原来的行为：清空选择并刷新数据
     // 清空选择
     selectedMembers.value = []
     selectedTemplate.value = null
