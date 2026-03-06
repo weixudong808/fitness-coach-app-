@@ -1,156 +1,99 @@
-# 健身教练会员管理系统
+# 健身教练管理系统
 
-一个专为健身私人教练设计的会员管理系统，帮助教练管理会员信息、制定训练计划、跟踪会员进步。
+一个专为健身私人教练设计的会员管理系统，支持训练记录、训练计划管理、会员进度追踪。
 
-## 功能特点
+## 🚀 快速开始
 
-### 教练端
-- ✅ 会员管理（添加、编辑、查看会员信息）
-- 🚧 训练计划模板管理（创建和编辑训练计划）
-- 🚧 为会员分配训练计划
-- 🚧 查看会员训练记录和进步数据
-
-### 会员端
-- 🚧 查看个人训练计划
-- 🚧 训练打卡与记录
-- 🚧 查看个人进步数据（体重、体脂、力量提升等）
-- 🚧 更新身体数据
-
-> ✅ 已完成 | 🚧 开发中
-
-## 技术栈
-
-- **前端框架**: Vue 3 + Vite
-- **UI组件库**: Element Plus
-- **路由管理**: Vue Router
-- **状态管理**: Pinia
-- **后端服务**: Supabase（云数据库 + 用户认证）
-- **部署**: Vercel（计划中）
-
-## 快速开始
-
-### 1. 环境要求
-
-- Node.js 18+
-- npm 或 yarn
-
-### 2. 安装依赖
-
+### 1. 安装依赖
 ```bash
 npm install
 ```
 
-### 3. 配置Supabase
-
-请按照 [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) 文档完成以下步骤：
-
-1. 注册Supabase账号
-2. 创建新项目
-3. 获取API密钥
-4. 创建数据库表
-5. 设置访问权限
-6. 创建测试用户
-
-### 4. 配置环境变量
-
-复制 `.env.example` 文件为 `.env`：
-
+### 2. 配置环境变量
 ```bash
-cp .env.example .env
+cp .env.local.example .env.local
 ```
+编辑 `.env.local`，填入你的 Supabase 配置和教练ID。
 
-然后编辑 `.env` 文件，填入你的Supabase配置：
-
-```
-VITE_SUPABASE_URL=你的Supabase项目URL
-VITE_SUPABASE_ANON_KEY=你的Supabase匿名密钥
-```
-
-### 5. 启动开发服务器
-
+### 3. 启动开发服务器
 ```bash
 npm run dev
 ```
 
-访问 http://localhost:5173 即可看到登录页面。
+访问 http://localhost:5173
 
-### 6. 登录测试
+## 📚 文档
 
-使用在Supabase中创建的测试账号登录：
-- 教练账号：可以管理会员和训练计划
-- 会员账号：只能查看自己的信息
+- **[系统技术文档.md](./系统技术文档.md)** - 完整的技术文档，包含数据库结构、问题解决记录、快速恢复指南
+- **[CLAUDE.md](../CLAUDE.md)** - AI训练记录助手使用指南
 
-## 项目结构
+## 🎯 核心功能
 
-```
-fitness-coach-app/
-├── public/                  # 静态资源
-├── src/
-│   ├── assets/             # 样式和图片资源
-│   ├── components/         # 可复用组件
-│   ├── composables/        # 组合式函数
-│   │   └── useAuth.js     # 用户认证逻辑
-│   ├── lib/
-│   │   └── supabase.js    # Supabase客户端配置
-│   ├── router/            # 路由配置
-│   ├── stores/            # 状态管理
-│   ├── views/             # 页面组件
-│   │   ├── coach/         # 教练端页面
-│   │   └── member/        # 会员端页面
-│   ├── App.vue            # 根组件
-│   └── main.ts            # 应用入口
-├── .env.example           # 环境变量示例
-├── SUPABASE_SETUP.md      # Supabase设置指南
-└── README.md             # 项目说明
-```
+### 训练记录功能
+- 通过对话方式实时记录会员训练数据
+- 文档暂存机制，稍后批量导入数据库
+- 智能导入，自动查询会员信息、创建训练计划
+- 支持重名会员识别
 
-## 常用命令
+### 训练计划管理
+- 创建训练模板
+- 为会员分配训练计划
+- 按课次组织训练内容
+- 记录训练完成情况
+
+## 🛠️ 技术栈
+
+- **前端**: Vue 3 + Element Plus + Vite
+- **后端**: Supabase (PostgreSQL + RLS)
+- **脚本**: Node.js + ES Modules
+
+## 📋 核心脚本
 
 ```bash
-# 安装依赖
-npm install
+# 初始化测试数据
+node init-test-data.js
 
-# 启动开发服务器
-npm run dev
+# 导入训练记录
+node import-training-record.js
 
-# 构建生产版本
-npm run build
-
-# 预览生产版本
-npm run preview
+# 验证训练数据
+node verify-training-data.js 张三
 ```
 
-## 学习资源
+## ⚙️ 配置说明
 
-如果你是编程新手，推荐以下学习资源：
+### .env.local 配置
+```env
+# Supabase Service Role Key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-- **Vue.js官方教程**: https://cn.vuejs.org/guide/introduction.html
-- **Element Plus文档**: https://element-plus.org/zh-CN/
-- **Supabase文档**: https://supabase.com/docs
-- **菜鸟教程（HTML/CSS/JS）**: https://www.runoob.com
+# 教练 ID（每个教练配置自己的ID）
+COACH_ID=your_coach_id
+```
 
-## 常见问题
+**如何获取教练ID：**
+1. 登录前端系统
+2. 打开浏览器控制台（F12）
+3. 查看 localStorage 中的认证信息
 
-### 启动项目时报错？
+详细配置说明请查看 `.env.local.example`
 
-1. 确保Node.js版本 >= 18
-2. 删除 `node_modules` 文件夹和 `package-lock.json`，重新运行 `npm install`
-3. 检查 `.env` 文件是否正确配置
+## 🔧 常见问题
 
-### 登录失败？
+### 导入的数据前端看不到？
+检查 `.env.local` 中的 `COACH_ID` 是否正确。详见[系统技术文档.md](./系统技术文档.md)的"快速恢复指南"章节。
 
-1. 检查Supabase项目是否正常运行
-2. 确认 `.env` 文件中的配置正确
-3. 确认用户已在Supabase中创建并设置了角色
+### 重名会员导入失败？
+在训练记录文档中添加手机号后4位，例如：`**会员：** 张三 (8000)`
 
-## 后续计划
+## 📞 技术支持
 
-1. **完善核心功能**：完成训练计划管理和会员端功能
-2. **优化用户体验**：改进界面设计，增加动画效果
-3. **数据分析**：添加更多数据可视化图表
-4. **移动端适配**：优化移动设备上的显示效果
-5. **微信小程序**：将Web版转换为微信小程序
+遇到问题请查看：
+1. [系统技术文档.md](./系统技术文档.md) - 完整的技术文档和问题解决方案
+2. [CLAUDE.md](../CLAUDE.md) - AI训练记录助手使用指南
+3. `.env.local.example` - 配置说明
 
 ---
 
-**注意**：这是一个正在开发中的项目，部分功能尚未完成。
+**当前版本**: 1.0
+**最后更新**: 2026-03-05

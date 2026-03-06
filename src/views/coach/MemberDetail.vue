@@ -342,7 +342,7 @@ const loadTrainingStats = async () => {
       .select('id, template_id, completed, completed_date, session_date')
       .in('template_id', templateIds)
       .eq('completed', true)
-      .order('completed_date', { ascending: true })
+      .order('session_date', { ascending: true })
 
     if (sessionsError) throw sessionsError
 
@@ -359,10 +359,10 @@ const loadTrainingStats = async () => {
     // 3. 计算统计数据
     const now = new Date()
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const monthSessions = completedSessions.filter(s => new Date(s.completed_date) >= thisMonth)
+    const monthSessions = completedSessions.filter(s => s.session_date && new Date(s.session_date) >= thisMonth)
 
     const lastSession = completedSessions[completedSessions.length - 1]
-    const lastDate = new Date(lastSession.completed_date)
+    const lastDate = new Date(lastSession.session_date || lastSession.completed_date)
 
     trainingStats.value = {
       totalSessions: completedSessions.length,
@@ -372,21 +372,39 @@ const loadTrainingStats = async () => {
     }
 
     // 4. 生成最近30天的训练频率数据
+    console.log('=== 调试：训练频率统计 ===')
+    console.log('completedSessions 数量:', completedSessions.length)
+    console.log('completedSessions 数据:', completedSessions.map(s => ({
+      id: s.id,
+      session_date: s.session_date,
+      date_only: s.session_date ? s.session_date.split('T')[0] : null
+    })))
+
     const last30Days = []
     for (let i = 29; i >= 0; i--) {
       const date = new Date()
       date.setDate(date.getDate() - i)
       const dateStr = date.toISOString().split('T')[0]
-      // 修复：比较日期时只取日期部分，忽略时间
+      // 使用 session_date（实际训练日期）进行统计
       const count = completedSessions.filter(s => {
-        const sessionDate = s.completed_date ? s.completed_date.split('T')[0] : ''
+        const sessionDate = s.session_date ? s.session_date.split('T')[0] : ''
         return sessionDate === dateStr
       }).length
+
+      if (count > 0) {
+        console.log(`日期 ${dateStr} (${date.getMonth() + 1}/${date.getDate()}): ${count} 次训练`)
+      }
+
       last30Days.push({
         date: `${date.getMonth() + 1}/${date.getDate()}`,
         count
       })
     }
+
+    console.log('frequencyData 总数据点:', last30Days.length)
+    console.log('有训练的日期:', last30Days.filter(d => d.count > 0))
+    console.log('=== 调试结束 ===')
+
     frequencyData.value = last30Days
 
     // 5. 查询动作进步数据
