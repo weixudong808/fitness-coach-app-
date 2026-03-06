@@ -539,13 +539,17 @@ const progressChartOption = computed(() => {
     // reps 已经是数字类型，直接使用
     return d.reps || 0
   })
+  const sets = exerciseData.data.map(d => {
+    // sets 已经是数字类型，直接使用
+    return d.sets || 0
+  })
 
   return {
     tooltip: {
       trigger: 'axis'
     },
     legend: {
-      data: ['重量', '次数']
+      data: ['重量', '次数', '组数']
     },
     xAxis: {
       type: 'category',
@@ -561,6 +565,12 @@ const progressChartOption = computed(() => {
         type: 'value',
         name: '次数',
         position: 'right'
+      },
+      {
+        type: 'value',
+        name: '组数',
+        position: 'right',
+        offset: 60
       }
     ],
     series: [
@@ -583,11 +593,21 @@ const progressChartOption = computed(() => {
           color: '#e6a23c'
         },
         yAxisIndex: 1
+      },
+      {
+        name: '组数',
+        type: 'line',
+        data: sets,
+        smooth: true,
+        itemStyle: {
+          color: '#409eff'
+        },
+        yAxisIndex: 2
       }
     ],
     grid: {
       left: '3%',
-      right: '8%',
+      right: '15%',
       bottom: '3%',
       containLabel: true
     }
