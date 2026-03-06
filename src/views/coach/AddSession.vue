@@ -278,9 +278,9 @@ const handleSave = async () => {
   }
 
   // 选择课次状态
-  const status = await selectSessionStatus()
+  const status = await selectSessionStatus(sessionForm.value.training_date)
   if (status === null) {
-    // 用户取消了操作
+    // 用户取消了操作，或者日期验证失败
     return
   }
 
