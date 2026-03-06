@@ -147,7 +147,29 @@
 
           <!-- 训练频率趋势图 -->
           <div style="margin-bottom: 30px;">
-            <h4 style="margin-bottom: 15px;">训练频率趋势（最近30天）</h4>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+              <h4 style="margin: 0;">训练频率趋势</h4>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <el-select v-model="dateRangeType" @change="handleDateRangeChange" style="width: 150px;">
+                  <el-option label="本月" value="thisMonth" />
+                  <el-option label="上月" value="lastMonth" />
+                  <el-option label="最近30天" value="recent30" />
+                  <el-option label="自定义" value="custom" />
+                </el-select>
+                <el-date-picker
+                  v-if="dateRangeType === 'custom'"
+                  v-model="customDateRange"
+                  type="daterange"
+                  range-separator="至"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  @change="handleCustomDateChange"
+                  style="width: 280px;"
+                />
+              </div>
+            </div>
             <v-chart :option="frequencyChartOption" style="height: 300px;" />
           </div>
 
@@ -293,6 +315,58 @@ const frequencyData = ref([])
 const exerciseProgressData = ref([])
 const selectedExercise = ref('')
 
+// 日期范围选择
+const dateRangeType = ref('recent30') // 'thisMonth' | 'lastMonth' | 'recent30' | 'custom'
+const customDateRange = ref([
+  new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+  new Date()
+])
+
+// 计算日期范围
+const getDateRange = () => {
+  const today = new Date()
+  let startDate, endDate
+
+  switch (dateRangeType.value) {
+    case 'thisMonth':
+      // 本月第一天到今天
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1)
+      endDate = today
+      break
+
+    case 'lastMonth':
+      // 上月第一天到上月最后一天
+      const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+      startDate = lastMonth
+      endDate = new Date(today.getFullYear(), today.getMonth(), 0) // 上月最后一天
+      break
+
+    case 'recent30':
+      // 最近30天
+      startDate = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)
+      endDate = today
+      break
+
+    case 'custom':
+      // 自定义日期
+      if (customDateRange.value && customDateRange.value.length === 2) {
+        startDate = new Date(customDateRange.value[0])
+        endDate = new Date(customDateRange.value[1])
+      } else {
+        // 默认最近30天
+        startDate = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)
+        endDate = today
+      }
+      break
+
+    default:
+      startDate = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000)
+      endDate = today
+  }
+
+  return { startDate, endDate }
+}
+
 const loadMemberDetail = async () => {
   loading.value = true
   try {
@@ -371,41 +445,31 @@ const loadTrainingStats = async () => {
       lastTrainingDate: lastDate.toLocaleDateString('zh-CN')
     }
 
-    // 4. 生成最近30天的训练频率数据
-    console.log('=== 调试：训练频率统计 ===')
-    console.log('completedSessions 数量:', completedSessions.length)
-    console.log('completedSessions 数据:', completedSessions.map(s => ({
-      id: s.id,
-      session_date: s.session_date,
-      date_only: s.session_date ? s.session_date.split('T')[0] : null
-    })))
+    // 4. 生成指定日期范围的训练频率数据
+    const { startDate, endDate } = getDateRange()
+    const frequencyDataArray = []
 
-    const last30Days = []
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
+    // 计算日期范围内的天数
+    const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
+
+    for (let i = 0; i < daysDiff; i++) {
+      const date = new Date(startDate)
+      date.setDate(date.getDate() + i)
       const dateStr = date.toISOString().split('T')[0]
+
       // 使用 session_date（实际训练日期）进行统计
       const count = completedSessions.filter(s => {
         const sessionDate = s.session_date ? s.session_date.split('T')[0] : ''
         return sessionDate === dateStr
       }).length
 
-      if (count > 0) {
-        console.log(`日期 ${dateStr} (${date.getMonth() + 1}/${date.getDate()}): ${count} 次训练`)
-      }
-
-      last30Days.push({
+      frequencyDataArray.push({
         date: `${date.getMonth() + 1}/${date.getDate()}`,
         count
       })
     }
 
-    console.log('frequencyData 总数据点:', last30Days.length)
-    console.log('有训练的日期:', last30Days.filter(d => d.count > 0))
-    console.log('=== 调试结束 ===')
-
-    frequencyData.value = last30Days
+    frequencyData.value = frequencyDataArray
 
     // 5. 查询动作进步数据
     await loadExerciseProgress(completedSessions)
@@ -415,6 +479,18 @@ const loadTrainingStats = async () => {
     ElMessage.error('加载训练统计失败')
   } finally {
     loadingStats.value = false
+  }
+}
+
+// 处理日期范围类型变化
+const handleDateRangeChange = () => {
+  loadTrainingStats()
+}
+
+// 处理自定义日期变化
+const handleCustomDateChange = () => {
+  if (customDateRange.value && customDateRange.value.length === 2) {
+    loadTrainingStats()
   }
 }
 
