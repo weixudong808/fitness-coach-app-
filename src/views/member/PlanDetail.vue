@@ -50,10 +50,10 @@
             <!-- 课次基本信息 -->
             <el-descriptions :column="2" border style="margin-bottom: 20px">
               <el-descriptions-item label="训练部位">
-                {{ session.training_area || '-' }}
+                {{ session.training_part || '-' }}
               </el-descriptions-item>
               <el-descriptions-item label="训练日期">
-                {{ formatDate(session.training_date) || '待安排' }}
+                {{ formatDate(session.session_date) || '待安排' }}
               </el-descriptions-item>
             </el-descriptions>
 
@@ -86,14 +86,54 @@
 
       <el-empty v-else description="暂无训练安排" />
     </el-card>
+
+    <!-- 本计划进步 -->
+    <el-card v-if="exerciseProgressData.length > 0" style="margin-top: 20px;">
+      <template #header>
+        <h3>本计划进步</h3>
+      </template>
+
+      <div style="margin-bottom: 20px;">
+        <el-select v-model="selectedExercise" placeholder="选择动作" style="width: 200px;">
+          <el-option
+            v-for="exercise in exerciseProgressData"
+            :key="exercise.name"
+            :label="exercise.name"
+            :value="exercise.name"
+          />
+        </el-select>
+      </div>
+
+      <v-chart :option="progressChartOption" style="height: 400px;" />
+    </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { supabase } from '../../lib/supabase'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { LineChart } from 'echarts/charts'
+import {
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent
+} from 'echarts/components'
+
+// 注册 ECharts 组件
+use([
+  CanvasRenderer,
+  LineChart,
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent
+])
 
 const route = useRoute()
 const router = useRouter()
@@ -102,6 +142,10 @@ const loading = ref(false)
 const planInfo = ref(null)
 const trainingSessions = ref([])
 const activeSession = ref(null)
+
+// 进步数据相关
+const exerciseProgressData = ref([])
+const selectedExercise = ref('')
 
 // 加载训练计划详情
 const loadPlanDetail = async () => {
@@ -159,11 +203,14 @@ const loadPlanDetail = async () => {
           return { ...session, exercises: [] }
         }
 
-        return { ...session, exercises: exercises || [], completed: false }
+        return { ...session, exercises: exercises || [] }
       })
     )
 
     trainingSessions.value = sessionsWithExercises
+
+    // 5. 加载本计划的进步数据
+    await loadPlanProgress(planData.template_id)
   } catch (error) {
     console.error('加载训练计划详情失败:', error)
     ElMessage.error('加载训练计划详情失败')
@@ -171,6 +218,222 @@ const loadPlanDetail = async () => {
     loading.value = false
   }
 }
+
+// 解析重量（支持自重格式）
+const parseWeight = (weightStr) => {
+  if (!weightStr) return 0
+
+  // 处理"自重"格式
+  if (weightStr.includes('自重')) {
+    if (weightStr === '自重') return 0
+
+    const plusMatch = weightStr.match(/自重\+(\d+(\.\d+)?)/)
+    if (plusMatch) return parseFloat(plusMatch[1])
+
+    const minusMatch = weightStr.match(/自重-(\d+(\.\d+)?)/)
+    if (minusMatch) return -parseFloat(minusMatch[1])
+
+    return 0
+  }
+
+  // 普通格式：80kg → 80
+  const match = weightStr.match(/(\d+(\.\d+)?)/)
+  return match ? parseFloat(match[1]) : 0
+}
+
+// 加载本计划的进步数据
+const loadPlanProgress = async (templateId) => {
+  try {
+    // 1. 查询本计划的已完成课次
+    const { data: completedSessions, error: sessionsError } = await supabase
+      .from('training_sessions')
+      .select('id, session_date')
+      .eq('template_id', templateId)
+      .eq('completed', true)
+      .order('session_date', { ascending: true })
+
+    if (sessionsError) throw sessionsError
+
+    if (!completedSessions || completedSessions.length === 0) {
+      exerciseProgressData.value = []
+      return
+    }
+
+    // 2. 查询这些课次的动作数据
+    const sessionIds = completedSessions.map(s => s.id)
+    const { data: exercises, error: exercisesError } = await supabase
+      .from('session_exercises')
+      .select('session_id, exercise_name, weight, reps_standard, sets')
+      .in('session_id', sessionIds)
+
+    if (exercisesError) throw exercisesError
+
+    if (!exercises || exercises.length === 0) {
+      exerciseProgressData.value = []
+      return
+    }
+
+    // 3. 使用 Map 进行 O(1) 查找
+    const sessionMap = new Map()
+    completedSessions.forEach(session => {
+      sessionMap.set(session.id, session)
+    })
+
+    // 4. 按动作名称分组
+    const progressByExercise = {}
+    exercises.forEach(exercise => {
+      const exerciseName = exercise.exercise_name
+      if (!exerciseName) return
+
+      if (!progressByExercise[exerciseName]) {
+        progressByExercise[exerciseName] = []
+      }
+
+      const session = sessionMap.get(exercise.session_id)
+      if (session && session.session_date) {
+        const weight = parseWeight(exercise.weight)
+        const repsMatch = exercise.reps_standard?.match(/(\d+)/)
+        const reps = repsMatch ? parseInt(repsMatch[1]) : 0
+
+        progressByExercise[exerciseName].push({
+          date: session.session_date,
+          weight: weight,
+          reps: reps,
+          sets: exercise.sets || 0,
+          originalWeight: exercise.weight
+        })
+      }
+    })
+
+    // 5. 转换为数组格式并排序
+    exerciseProgressData.value = Object.keys(progressByExercise).map(name => ({
+      name,
+      data: progressByExercise[name].sort((a, b) => new Date(a.date) - new Date(b.date))
+    }))
+
+    if (exerciseProgressData.value.length > 0) {
+      selectedExercise.value = exerciseProgressData.value[0].name
+    }
+  } catch (error) {
+    console.error('加载进步数据失败:', error)
+  }
+}
+
+// 动作进步图表配置
+const progressChartOption = computed(() => {
+  const exerciseData = exerciseProgressData.value.find(e => e.name === selectedExercise.value)
+  if (!exerciseData) {
+    return {}
+  }
+
+  // 检测是否包含"自重"格式
+  const hasBodyweightFormat = exerciseData.data.some(d => d.originalWeight?.includes('自重'))
+
+  const dates = exerciseData.data.map(d => new Date(d.date).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }))
+  const weights = exerciseData.data.map(d => d.weight || 0)
+  const reps = exerciseData.data.map(d => d.reps || 0)
+  const sets = exerciseData.data.map(d => d.sets || 0)
+
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: function(params) {
+        let result = params[0].axisValue + '<br/>'
+        params.forEach(param => {
+          const dataIndex = param.dataIndex
+          const value = param.value
+          let displayValue = value
+
+          if (param.seriesName === '重量' && hasBodyweightFormat) {
+            const originalWeight = exerciseData.data[dataIndex]?.originalWeight
+            if (originalWeight?.includes('自重')) {
+              displayValue = originalWeight
+            } else {
+              displayValue = value + 'kg'
+            }
+          } else if (param.seriesName === '重量') {
+            displayValue = value + 'kg'
+          } else if (param.seriesName === '次数') {
+            displayValue = value + '次'
+          } else if (param.seriesName === '组数') {
+            displayValue = value + '组'
+          }
+
+          result += param.marker + param.seriesName + ': ' + displayValue + '<br/>'
+        })
+        return result
+      }
+    },
+    legend: {
+      data: ['重量', '次数', '组数'],
+      top: 0,
+      left: 'center'
+    },
+    xAxis: {
+      type: 'category',
+      data: dates
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '重量 (kg)',
+        position: 'left',
+        axisLabel: {
+          formatter: hasBodyweightFormat ? function(value) {
+            if (value === 0) return '自重'
+            if (value > 0) return '+' + value
+            return value
+          } : function(value) {
+            return value
+          }
+        }
+      },
+      {
+        type: 'value',
+        name: '次数',
+        position: 'right'
+      },
+      {
+        type: 'value',
+        name: '组数',
+        position: 'right',
+        offset: 60
+      }
+    ],
+    series: [
+      {
+        name: '重量',
+        type: 'line',
+        data: weights,
+        smooth: true,
+        itemStyle: { color: '#67c23a' },
+        yAxisIndex: 0
+      },
+      {
+        name: '次数',
+        type: 'line',
+        data: reps,
+        smooth: true,
+        itemStyle: { color: '#e6a23c' },
+        yAxisIndex: 1
+      },
+      {
+        name: '组数',
+        type: 'line',
+        data: sets,
+        smooth: true,
+        itemStyle: { color: '#409eff' },
+        yAxisIndex: 2
+      }
+    ],
+    grid: {
+      left: '3%',
+      right: '15%',
+      bottom: '3%',
+      containLabel: true
+    }
+  }
+})
 
 // 查看某一天的训练详情
 const viewDayDetail = (day) => {

@@ -1,10 +1,22 @@
 <template>
   <div class="my-plan-container">
+    <!-- 顶部导航菜单 -->
+    <el-menu
+      :default-active="activeMenu"
+      mode="horizontal"
+      @select="handleMenuSelect"
+      style="margin-bottom: 20px;"
+    >
+      <el-menu-item index="plan">我的训练计划</el-menu-item>
+      <el-menu-item index="progress">我的进步</el-menu-item>
+      <div style="flex: 1;"></div>
+      <el-button type="danger" @click="handleLogout" style="margin: 12px 20px;">退出登录</el-button>
+    </el-menu>
+
     <el-card>
       <template #header>
         <div class="card-header">
           <h2>我的训练计划</h2>
-          <el-button type="danger" @click="handleLogout">退出登录</el-button>
         </div>
       </template>
 
@@ -68,6 +80,16 @@ const { signOut, user, getCurrentUser } = useAuth()
 
 const loading = ref(false)
 const plans = ref([])
+const activeMenu = ref('plan')
+
+// 处理菜单选择
+const handleMenuSelect = (index) => {
+  if (index === 'progress') {
+    router.push({ name: 'member-progress' })
+  } else if (index === 'plan') {
+    router.push({ name: 'member-plan' })
+  }
+}
 
 // 进行中的计划
 const activePlans = computed(() => {

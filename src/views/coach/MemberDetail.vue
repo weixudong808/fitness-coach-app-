@@ -531,9 +531,32 @@ const loadExerciseProgress = async (completedSessions) => {
       // 使用 Map 进行 O(1) 查找
       const session = sessionMap.get(exercise.session_id)
       if (session && session.session_date) {
-        // 提取重量数值（去除单位）
-        const weightMatch = exercise.weight?.match(/(\d+(\.\d+)?)/)
-        const weight = weightMatch ? parseFloat(weightMatch[1]) : 0
+        // 解析重量（支持自重格式）
+        const parseWeight = (weightStr) => {
+          if (!weightStr) return 0
+
+          // 处理"自重"格式
+          if (weightStr.includes('自重')) {
+            // 自重 → 0
+            if (weightStr === '自重') return 0
+
+            // 自重+10kg → 10
+            const plusMatch = weightStr.match(/自重\+(\d+(\.\d+)?)/)
+            if (plusMatch) return parseFloat(plusMatch[1])
+
+            // 自重-10kg → -10
+            const minusMatch = weightStr.match(/自重-(\d+(\.\d+)?)/)
+            if (minusMatch) return -parseFloat(minusMatch[1])
+
+            return 0
+          }
+
+          // 普通格式：80kg → 80
+          const match = weightStr.match(/(\d+(\.\d+)?)/)
+          return match ? parseFloat(match[1]) : 0
+        }
+
+        const weight = parseWeight(exercise.weight)
 
         // 提取次数数值
         const repsMatch = exercise.reps_standard?.match(/(\d+)/)
@@ -543,7 +566,8 @@ const loadExerciseProgress = async (completedSessions) => {
           date: session.session_date,
           weight: weight,
           reps: reps,
-          sets: exercise.sets || 0
+          sets: exercise.sets || 0,
+          originalWeight: exercise.weight // 保留原始重量字符串
         })
       }
     })
@@ -606,6 +630,9 @@ const progressChartOption = computed(() => {
     return {}
   }
 
+  // 检测是否包含"自重"格式
+  const hasBodyweightFormat = exerciseData.data.some(d => d.originalWeight?.includes('自重'))
+
   const dates = exerciseData.data.map(d => new Date(d.date).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }))
   const weights = exerciseData.data.map(d => {
     // weight 已经是数字类型，直接使用
@@ -622,10 +649,39 @@ const progressChartOption = computed(() => {
 
   return {
     tooltip: {
-      trigger: 'axis'
+      trigger: 'axis',
+      formatter: function(params) {
+        let result = params[0].axisValue + '<br/>'
+        params.forEach(param => {
+          const dataIndex = param.dataIndex
+          const value = param.value
+          let displayValue = value
+
+          // 为重量添加特殊说明
+          if (param.seriesName === '重量' && hasBodyweightFormat) {
+            const originalWeight = exerciseData.data[dataIndex]?.originalWeight
+            if (originalWeight?.includes('自重')) {
+              displayValue = originalWeight
+            } else {
+              displayValue = value + 'kg'
+            }
+          } else if (param.seriesName === '重量') {
+            displayValue = value + 'kg'
+          } else if (param.seriesName === '次数') {
+            displayValue = value + '次'
+          } else if (param.seriesName === '组数') {
+            displayValue = value + '组'
+          }
+
+          result += param.marker + param.seriesName + ': ' + displayValue + '<br/>'
+        })
+        return result
+      }
     },
     legend: {
-      data: ['重量', '次数', '组数']
+      data: ['重量', '次数', '组数'],
+      top: 0,
+      left: 'center'
     },
     xAxis: {
       type: 'category',
@@ -635,7 +691,16 @@ const progressChartOption = computed(() => {
       {
         type: 'value',
         name: '重量 (kg)',
-        position: 'left'
+        position: 'left',
+        axisLabel: {
+          formatter: hasBodyweightFormat ? function(value) {
+            if (value === 0) return '自重'
+            if (value > 0) return '+' + value
+            return value
+          } : function(value) {
+            return value
+          }
+        }
       },
       {
         type: 'value',
