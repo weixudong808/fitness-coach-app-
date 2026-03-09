@@ -134,9 +134,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { supabase } from '../../lib/supabase'
 import { selectSessionStatus } from '../../utils/sessionStatus'
+import { useAchievements } from '../../composables/useAchievements'
 
 const route = useRoute()
 const router = useRouter()
+const { updateProgress } = useAchievements()
 
 const planId = ref(null)
 const templateId = ref(null)
@@ -325,6 +327,11 @@ const handleSave = async () => {
 
     ElMessage.success('训练课次添加成功！')
 
+    // 如果课次标记为已完成，自动更新会员的打卡认证进度
+    if (status.completed) {
+      await updateMemberAchievements(sessionData.id)
+    }
+
     // 返回训练计划详情页
     router.push({
       name: 'coach-plan-detail',
@@ -335,6 +342,40 @@ const handleSave = async () => {
     ElMessage.error(`保存失败: ${error.message}`)
   } finally {
     saving.value = false
+  }
+}
+
+// 更新会员的打卡认证进度
+const updateMemberAchievements = async (sessionId) => {
+  try {
+    // 1. 通过 template_id 查询 member_plans 获取 member_id
+    const { data: planData, error: planError } = await supabase
+      .from('member_plans')
+      .select('member_id')
+      .eq('template_id', templateId.value)
+      .single()
+
+    if (planError) throw planError
+
+    const memberId = planData.member_id
+
+    // 2. 更新所有打卡相关的认证进度
+    const checkInAchievements = [
+      'check_in_10',
+      'check_in_25',
+      'check_in_50',
+      'check_in_75',
+      'check_in_100'
+    ]
+
+    for (const achievementCode of checkInAchievements) {
+      await updateProgress(memberId, achievementCode)
+    }
+
+    console.log('✅ 会员认证进度已更新')
+  } catch (error) {
+    console.error('❌ 更新会员认证进度失败:', error)
+    // 不影响主流程，只记录错误
   }
 }
 
