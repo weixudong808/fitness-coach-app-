@@ -48,36 +48,42 @@ export function useAchievements() {
   }
 
   /**
-   * 计算打卡次数
+   * 计算打卡次数（只统计有效训练计划）
    */
   const calculateCheckInCount = async (memberId) => {
     try {
-      // 查询会员的所有已完成课次
-      const { data: sessions, error } = await supabase
+      // 1. 先获取该会员的有效训练计划（status='active' 或 'completed'）
+      const { data: memberPlans, error: planError } = await supabase
+        .from('member_plans')
+        .select('template_id')
+        .eq('member_id', memberId)
+        .in('status', ['active', 'completed'])
+
+      if (planError) {
+        console.error('查询会员训练计划失败:', planError)
+        return 0
+      }
+
+      if (!memberPlans || memberPlans.length === 0) {
+        return 0
+      }
+
+      // 2. 获取这些有效计划的模板ID
+      const activeTemplateIds = memberPlans.map(p => p.template_id)
+
+      // 3. 统计这些模板下已完成的课次
+      const { data: sessions, error: sessionError } = await supabase
         .from('training_sessions')
-        .select('id, template_id')
+        .select('id')
+        .in('template_id', activeTemplateIds)
         .eq('completed', true)
 
-      if (error) throw error
+      if (sessionError) {
+        console.error('查询训练课次失败:', sessionError)
+        return 0
+      }
 
-      // 过滤出属于该会员的课次
-      if (!sessions || sessions.length === 0) return 0
-
-      // 获取这些课次对应的模板，筛选出属于该会员的
-      const templateIds = [...new Set(sessions.map(s => s.template_id))]
-
-      const { data: templates, error: templateError } = await supabase
-        .from('training_templates')
-        .select('id, member_id')
-        .in('id', templateIds)
-        .eq('member_id', memberId)
-
-      if (templateError) throw templateError
-
-      const memberTemplateIds = new Set(templates?.map(t => t.id) || [])
-      const memberSessions = sessions.filter(s => memberTemplateIds.has(s.template_id))
-
-      return memberSessions.length
+      return sessions?.length || 0
     } catch (error) {
       console.error('计算打卡次数失败:', error)
       return 0
