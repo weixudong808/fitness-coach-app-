@@ -9,6 +9,7 @@
     >
       <el-menu-item index="plan">我的训练计划</el-menu-item>
       <el-menu-item index="progress">我的进步</el-menu-item>
+      <el-menu-item index="achievements">我的认证</el-menu-item>
       <div style="flex: 1;"></div>
       <el-button type="danger" @click="handleLogout" style="margin: 12px 20px;">退出登录</el-button>
     </el-menu>
@@ -126,6 +127,8 @@ const handleMenuSelect = (index) => {
     router.push({ name: 'member-progress' })
   } else if (index === 'plan') {
     router.push({ name: 'member-plan' })
+  } else if (index === 'achievements') {
+    router.push({ name: 'member-achievements' })
   }
 }
 

@@ -1,0 +1,625 @@
+import { ref } from 'vue'
+import { supabase } from '../lib/supabase'
+
+const loading = ref(false)
+const achievements = ref([])
+const memberLevel = ref(null)
+const progressData = ref([])
+
+export function useAchievements() {
+  /**
+   * 获取会员ID（从当前登录用户）
+   */
+  const getCurrentMemberId = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('未登录')
+
+      const { data: member } = await supabase
+        .from('members')
+        .select('id')
+        .eq('user_id', user.id)
+        .single()
+
+      return member?.id
+    } catch (error) {
+      console.error('获取会员ID失败:', error)
+      return null
+    }
+  }
+
+  /**
+   * 获取所有认证定义
+   */
+  const getAchievementDefinitions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('achievement_definitions')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order')
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('获取认证定义失败:', error)
+      return []
+    }
+  }
+
+  /**
+   * 计算打卡次数
+   */
+  const calculateCheckInCount = async (memberId) => {
+    try {
+      // 查询会员的所有已完成课次
+      const { data: sessions, error } = await supabase
+        .from('training_sessions')
+        .select('id, template_id')
+        .eq('completed', true)
+
+      if (error) throw error
+
+      // 过滤出属于该会员的课次
+      if (!sessions || sessions.length === 0) return 0
+
+      // 获取这些课次对应的模板，筛选出属于该会员的
+      const templateIds = [...new Set(sessions.map(s => s.template_id))]
+
+      const { data: templates, error: templateError } = await supabase
+        .from('training_templates')
+        .select('id, member_id')
+        .in('id', templateIds)
+        .eq('member_id', memberId)
+
+      if (templateError) throw templateError
+
+      const memberTemplateIds = new Set(templates?.map(t => t.id) || [])
+      const memberSessions = sessions.filter(s => memberTemplateIds.has(s.template_id))
+
+      return memberSessions.length
+    } catch (error) {
+      console.error('计算打卡次数失败:', error)
+      return 0
+    }
+  }
+
+  /**
+   * 计算动作最佳成绩
+   */
+  const calculateExerciseBest = async (memberId, exerciseName) => {
+    try {
+      // 查询会员的所有已完成课次
+      const { data: sessions } = await supabase
+        .from('training_sessions')
+        .select('id, template_id')
+        .eq('completed', true)
+
+      if (!sessions || sessions.length === 0) return null
+
+      // 获取属于该会员的模板
+      const templateIds = [...new Set(sessions.map(s => s.template_id))]
+      const { data: templates } = await supabase
+        .from('training_templates')
+        .select('id')
+        .in('id', templateIds)
+        .eq('member_id', memberId)
+
+      const memberTemplateIds = new Set(templates?.map(t => t.id) || [])
+      const memberSessionIds = sessions
+        .filter(s => memberTemplateIds.has(s.template_id))
+        .map(s => s.id)
+
+      if (memberSessionIds.length === 0) return null
+
+      // 查询该动作的所有记录
+      const { data: exercises } = await supabase
+        .from('session_exercises')
+        .select('weight, reps_standard, sets')
+        .in('session_id', memberSessionIds)
+        .ilike('exercise_name', `%${exerciseName}%`)
+
+      if (!exercises || exercises.length === 0) return null
+
+      // 找出最佳成绩（这里简化处理，实际可能需要更复杂的逻辑）
+      return exercises[0]
+    } catch (error) {
+      console.error('计算动作最佳成绩失败:', error)
+      return null
+    }
+  }
+
+  /**
+   * 计算转介绍人数
+   */
+  const calculateReferralCount = async (memberId) => {
+    try {
+      const { count, error } = await supabase
+        .from('members')
+        .select('id', { count: 'exact', head: true })
+        .eq('referrer_id', memberId)
+
+      if (error) throw error
+      return count || 0
+    } catch (error) {
+      console.error('计算转介绍人数失败:', error)
+      return 0
+    }
+  }
+
+  /**
+   * 计算单个认证的进度
+   */
+  const calculateSingleProgress = async (memberId, achievement) => {
+    const requirement = achievement.requirement
+    let currentValue = 0
+    let targetValue = 0
+
+    try {
+      switch (requirement.type) {
+        case 'register':
+          // 注册认证：只要会员存在就算完成
+          currentValue = 1
+          targetValue = 1
+          break
+
+        case 'check_in_count':
+          // 打卡次数认证
+          currentValue = await calculateCheckInCount(memberId)
+          targetValue = requirement.target
+          break
+
+        case 'referral_count':
+          // 转介绍认证
+          currentValue = await calculateReferralCount(memberId)
+          targetValue = requirement.target
+          break
+
+        case 'exercise_performance':
+          // 动作表现认证（暂时简化处理）
+          targetValue = requirement.target
+          currentValue = 0 // 需要教练手动标记完成
+          break
+
+        case 'exercise_group':
+          // 动作组认证（暂时简化处理）
+          targetValue = requirement.exercises?.length || 1
+          currentValue = 0 // 需要教练手动标记完成
+          break
+
+        case 'body_metric':
+          // 体测数据认证（暂时不实现）
+          targetValue = 1
+          currentValue = 0
+          break
+
+        case 'achievement_group':
+          // 认证组（需要完成一组认证）
+          targetValue = requirement.target === 'all' ? 100 : requirement.target
+          currentValue = 0 // 需要根据子认证计算
+          break
+
+        default:
+          targetValue = 1
+          currentValue = 0
+      }
+
+      const progressPercent = targetValue > 0
+        ? Math.min(Math.round((currentValue / targetValue) * 100), 100)
+        : 0
+
+      const isCompleted = currentValue >= targetValue && targetValue > 0
+
+      return {
+        achievement_code: achievement.code,
+        current_value: currentValue,
+        target_value: targetValue,
+        progress_percent: progressPercent,
+        is_completed: isCompleted,
+        completed_at: isCompleted ? new Date().toISOString() : null
+      }
+    } catch (error) {
+      console.error(`计算认证进度失败 [${achievement.code}]:`, error)
+      return {
+        achievement_code: achievement.code,
+        current_value: 0,
+        target_value: targetValue || 1,
+        progress_percent: 0,
+        is_completed: false,
+        completed_at: null
+      }
+    }
+  }
+
+  /**
+   * 计算所有认证进度
+   */
+  const calculateProgress = async (memberId) => {
+    loading.value = true
+    try {
+      // 获取所有认证定义
+      const definitions = await getAchievementDefinitions()
+
+      // 计算每个认证的进度
+      const progressList = []
+      for (const achievement of definitions) {
+        const progress = await calculateSingleProgress(memberId, achievement)
+        progressList.push(progress)
+      }
+
+      // 批量更新或插入进度数据
+      for (const progress of progressList) {
+        const { error: upsertError } = await supabase
+          .from('member_achievement_progress')
+          .upsert({
+            member_id: memberId,
+            achievement_code: progress.achievement_code,
+            current_value: progress.current_value,
+            target_value: progress.target_value,
+            progress_percent: progress.progress_percent,
+            is_completed: progress.is_completed,
+            completed_at: progress.completed_at,
+            last_updated: new Date().toISOString()
+          }, {
+            onConflict: 'member_id,achievement_code'
+          })
+
+        if (upsertError) {
+          console.error(`❌ 更新进度失败 [${progress.achievement_code}]:`, upsertError)
+          console.error('数据:', progress)
+        }
+      }
+
+      // 检查并颁发已完成的认证
+      for (const progress of progressList) {
+        if (progress.is_completed) {
+          await checkAndAwardAchievement(memberId, progress.achievement_code)
+        }
+      }
+
+      // 更新会员等级
+      await updateMemberLevel(memberId)
+
+      return progressList
+    } catch (error) {
+      console.error('计算认证进度失败:', error)
+      return []
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * 更新单个认证进度
+   */
+  const updateProgress = async (memberId, achievementCode) => {
+    try {
+      // 获取认证定义
+      const { data: achievement } = await supabase
+        .from('achievement_definitions')
+        .select('*')
+        .eq('code', achievementCode)
+        .single()
+
+      if (!achievement) return
+
+      // 计算进度
+      const progress = await calculateSingleProgress(memberId, achievement)
+
+      // 更新进度数据
+      const { error: upsertError } = await supabase
+        .from('member_achievement_progress')
+        .upsert({
+          member_id: memberId,
+          achievement_code: progress.achievement_code,
+          current_value: progress.current_value,
+          target_value: progress.target_value,
+          progress_percent: progress.progress_percent,
+          is_completed: progress.is_completed,
+          completed_at: progress.completed_at,
+          last_updated: new Date().toISOString()
+        }, {
+          onConflict: 'member_id,achievement_code'
+        })
+
+      if (upsertError) {
+        console.error(`❌ 更新进度失败 [${achievementCode}]:`, upsertError)
+        return
+      }
+
+      // 检查是否完成
+      if (progress.is_completed) {
+        await checkAndAwardAchievement(memberId, achievementCode)
+      }
+
+      // 更新会员等级
+      await updateMemberLevel(memberId)
+    } catch (error) {
+      console.error('更新认证进度失败:', error)
+    }
+  }
+
+  /**
+   * 检查并颁发认证
+   */
+  const checkAndAwardAchievement = async (memberId, achievementCode) => {
+    try {
+      // 检查是否已经获得该认证
+      const { data: existing } = await supabase
+        .from('member_achievements')
+        .select('id')
+        .eq('member_id', memberId)
+        .eq('achievement_code', achievementCode)
+        .single()
+
+      if (existing) return // 已经获得，不重复颁发
+
+      // 颁发认证
+      await supabase
+        .from('member_achievements')
+        .insert({
+          member_id: memberId,
+          achievement_code: achievementCode,
+          achieved_at: new Date().toISOString()
+        })
+
+      console.log(`✅ 颁发认证: ${achievementCode}`)
+    } catch (error) {
+      // 忽略重复插入错误
+      if (!error.message?.includes('duplicate')) {
+        console.error('颁发认证失败:', error)
+      }
+    }
+  }
+
+  /**
+   * 更新会员等级
+   */
+  const updateMemberLevel = async (memberId) => {
+    try {
+      // 统计已获得的认证数量
+      const { count } = await supabase
+        .from('member_achievements')
+        .select('id', { count: 'exact', head: true })
+        .eq('member_id', memberId)
+
+      const totalAchievements = count || 0
+
+      // 根据认证数量计算等级（简化逻辑）
+      let currentLevel = 1
+      let levelName = '新手'
+
+      if (totalAchievements >= 20) {
+        currentLevel = 9
+        levelName = '自主训练者'
+      } else if (totalAchievements >= 15) {
+        currentLevel = 8
+        levelName = '高级训练者'
+      } else if (totalAchievements >= 10) {
+        currentLevel = 7
+        levelName = '进阶训练者'
+      } else if (totalAchievements >= 7) {
+        currentLevel = 6
+        levelName = '中级训练者'
+      } else if (totalAchievements >= 5) {
+        currentLevel = 5
+        levelName = '基础训练者'
+      } else if (totalAchievements >= 3) {
+        currentLevel = 4
+        levelName = '初级训练者'
+      } else if (totalAchievements >= 2) {
+        currentLevel = 3
+        levelName = '入门训练者'
+      } else if (totalAchievements >= 1) {
+        currentLevel = 2
+        levelName = '新手训练者'
+      }
+
+      // 更新或插入等级数据
+      await supabase
+        .from('member_levels')
+        .upsert({
+          member_id: memberId,
+          current_level: currentLevel,
+          level_name: levelName,
+          total_achievements: totalAchievements,
+          experience_points: totalAchievements * 100, // 每个认证100经验值
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'member_id'
+        })
+    } catch (error) {
+      console.error('更新会员等级失败:', error)
+    }
+  }
+
+  /**
+   * 获取会员等级信息
+   */
+  const getMemberLevel = async (memberId) => {
+    try {
+      const { data, error } = await supabase
+        .from('member_levels')
+        .select('*')
+        .eq('member_id', memberId)
+        .single()
+
+      if (error) {
+        // 如果没有等级记录，初始化一个
+        await updateMemberLevel(memberId)
+        return await getMemberLevel(memberId)
+      }
+
+      memberLevel.value = data
+      return data
+    } catch (error) {
+      console.error('获取会员等级失败:', error)
+      return null
+    }
+  }
+
+  /**
+   * 按类别获取认证
+   */
+  const getAchievementsByCategory = async (memberId, category) => {
+    try {
+      // 获取该类别的认证定义
+      const { data: definitions, error: defError } = await supabase
+        .from('achievement_definitions')
+        .select('*')
+        .eq('category', category)
+        .eq('is_active', true)
+
+      if (defError) {
+        console.error('获取认证定义失败:', defError)
+        return []
+      }
+
+      if (!definitions || definitions.length === 0) return []
+
+      // 获取进度数据
+      const codes = definitions.map(d => d.code)
+      const { data: progressList, error: progressError } = await supabase
+        .from('member_achievement_progress')
+        .select('*')
+        .eq('member_id', memberId)
+        .in('achievement_code', codes)
+
+      if (progressError) {
+        console.error('获取进度数据失败:', progressError)
+        // 即使进度查询失败，也返回认证定义（进度为0）
+      }
+
+      // 合并数据
+      const result = definitions.map(def => {
+        const progress = progressList?.find(p => p.achievement_code === def.code)
+        return {
+          ...def,
+          progress: progress || {
+            current_value: 0,
+            target_value: 1,
+            progress_percent: 0,
+            is_completed: false
+          }
+        }
+      })
+
+      return result
+    } catch (error) {
+      console.error('获取认证列表失败:', error)
+      return []
+    }
+  }
+
+  /**
+   * 获取会员所有认证进度
+   */
+  const getAllProgress = async (memberId) => {
+    try {
+      // 先获取进度数据
+      const { data: progressList, error: progressError } = await supabase
+        .from('member_achievement_progress')
+        .select('*')
+        .eq('member_id', memberId)
+        .order('achievement_code')
+
+      if (progressError) {
+        console.error('获取进度数据失败:', progressError)
+        return []
+      }
+
+      // 再获取认证定义
+      const codes = progressList?.map(p => p.achievement_code) || []
+      if (codes.length === 0) return []
+
+      const { data: definitions, error: defError } = await supabase
+        .from('achievement_definitions')
+        .select('*')
+        .in('code', codes)
+
+      if (defError) {
+        console.error('获取认证定义失败:', defError)
+        return progressList || []
+      }
+
+      // 合并数据
+      const result = progressList.map(progress => {
+        const definition = definitions?.find(d => d.code === progress.achievement_code)
+        return {
+          ...progress,
+          achievement: definition
+        }
+      })
+
+      progressData.value = result
+      return result
+    } catch (error) {
+      console.error('获取认证进度失败:', error)
+      return []
+    }
+  }
+
+  /**
+   * 获取会员已获得的认证
+   */
+  const getAchievedList = async (memberId) => {
+    try {
+      // 先获取已获得的认证记录
+      const { data: achievementList, error: achievementError } = await supabase
+        .from('member_achievements')
+        .select('*')
+        .eq('member_id', memberId)
+        .order('achieved_at', { ascending: false })
+
+      if (achievementError) {
+        console.error('获取已获得认证失败:', achievementError)
+        return []
+      }
+
+      if (!achievementList || achievementList.length === 0) return []
+
+      // 再获取认证定义
+      const codes = achievementList.map(a => a.achievement_code)
+      const { data: definitions, error: defError } = await supabase
+        .from('achievement_definitions')
+        .select('*')
+        .in('code', codes)
+
+      if (defError) {
+        console.error('获取认证定义失败:', defError)
+        return achievementList
+      }
+
+      // 合并数据
+      const result = achievementList.map(achievement => {
+        const definition = definitions?.find(d => d.code === achievement.achievement_code)
+        return {
+          ...achievement,
+          achievement: definition
+        }
+      })
+
+      achievements.value = result
+      return result
+    } catch (error) {
+      console.error('获取已获得认证失败:', error)
+      return []
+    }
+  }
+
+  return {
+    loading,
+    achievements,
+    memberLevel,
+    progressData,
+    getCurrentMemberId,
+    getAchievementDefinitions,
+    calculateProgress,
+    updateProgress,
+    checkAndAwardAchievement,
+    getMemberLevel,
+    getAchievementsByCategory,
+    getAllProgress,
+    getAchievedList
+  }
+}

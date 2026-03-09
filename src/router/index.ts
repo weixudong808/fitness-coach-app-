@@ -102,6 +102,11 @@ const router = createRouter({
           path: 'progress',
           name: 'member-progress',
           component: () => import('../views/member/MyProgress.vue')
+        },
+        {
+          path: 'achievements',
+          name: 'member-achievements',
+          component: () => import('../views/member/MyAchievements.vue')
         }
       ]
     }
