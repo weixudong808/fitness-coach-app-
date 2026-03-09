@@ -249,17 +249,20 @@ const loadData = async () => {
     await getMemberLevel(memberId)
 
     // 加载各类别认证
+    const newbieAchievements = await getAchievementsByCategory(memberId, 'newbie')
     checkInAchievements.value = await getAchievementsByCategory(memberId, 'check_in')
     influenceAchievements.value = await getAchievementsByCategory(memberId, 'influence')
     basicFitnessAchievements.value = await getAchievementsByCategory(memberId, 'basic_fitness')
     advancedFitnessAchievements.value = await getAchievementsByCategory(memberId, 'advanced_fitness')
 
-    // 加载所有认证（用于徽章墙）
-    const { data: allDefs } = await supabase
-      .from('achievement_definitions')
-      .select('*')
-      .order('sort_order')
-    allAchievements.value = allDefs || []
+    // 合并所有认证数据（用于徽章墙）
+    allAchievements.value = [
+      ...newbieAchievements,
+      ...checkInAchievements.value,
+      ...influenceAchievements.value,
+      ...basicFitnessAchievements.value,
+      ...advancedFitnessAchievements.value
+    ]
 
     // 加载已获得的认证
     achievedList.value = await getAchievedList(memberId)
@@ -273,13 +276,16 @@ const loadData = async () => {
 
 // 判断是否已获得认证
 const isAchieved = (code) => {
-  return achievedList.value.some(a => a.achievement_code === code)
+  // 从 allAchievements 中查找认证（已包含进度数据）
+  const achievement = allAchievements.value.find(a => a.code === code)
+  return achievement?.progress?.is_completed === true
 }
 
 // 获取认证获得日期
 const getAchievedDate = (code) => {
-  const achievement = achievedList.value.find(a => a.achievement_code === code)
-  return achievement?.achieved_at
+  // 从 allAchievements 中查找认证（已包含进度数据）
+  const achievement = allAchievements.value.find(a => a.code === code)
+  return achievement?.progress?.completed_at
 }
 
 // 格式化日期

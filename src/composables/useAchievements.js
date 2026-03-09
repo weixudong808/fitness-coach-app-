@@ -52,6 +52,8 @@ export function useAchievements() {
    */
   const calculateCheckInCount = async (memberId) => {
     try {
+      console.log('🔍 开始计算打卡次数，会员ID:', memberId)
+
       // 1. 先获取该会员的有效训练计划（status='active' 或 'completed'）
       const { data: memberPlans, error: planError } = await supabase
         .from('member_plans')
@@ -59,17 +61,21 @@ export function useAchievements() {
         .eq('member_id', memberId)
         .in('status', ['active', 'completed'])
 
+      console.log('📋 会员训练计划:', memberPlans)
+
       if (planError) {
         console.error('查询会员训练计划失败:', planError)
         return 0
       }
 
       if (!memberPlans || memberPlans.length === 0) {
+        console.log('⚠️ 没有找到有效的训练计划')
         return 0
       }
 
       // 2. 获取这些有效计划的模板ID
       const activeTemplateIds = memberPlans.map(p => p.template_id)
+      console.log('📝 模板ID列表:', activeTemplateIds)
 
       // 3. 统计这些模板下已完成的课次
       const { data: sessions, error: sessionError } = await supabase
@@ -77,6 +83,9 @@ export function useAchievements() {
         .select('id')
         .in('template_id', activeTemplateIds)
         .eq('completed', true)
+
+      console.log('✅ 已完成的课次:', sessions)
+      console.log('📊 打卡次数:', sessions?.length || 0)
 
       if (sessionError) {
         console.error('查询训练课次失败:', sessionError)
@@ -687,7 +696,7 @@ export function useAchievements() {
   }
 
   /**
-   * 按类别获取认证
+   * 按类别获取认证（实时计算进度）
    */
   const getAchievementsByCategory = async (memberId, category) => {
     try {
@@ -697,6 +706,7 @@ export function useAchievements() {
         .select('*')
         .eq('category', category)
         .eq('is_active', true)
+        .order('sort_order')
 
       if (defError) {
         console.error('获取认证定义失败:', defError)
@@ -705,32 +715,21 @@ export function useAchievements() {
 
       if (!definitions || definitions.length === 0) return []
 
-      // 获取进度数据
-      const codes = definitions.map(d => d.code)
-      const { data: progressList, error: progressError } = await supabase
-        .from('member_achievement_progress')
-        .select('*')
-        .eq('member_id', memberId)
-        .in('achievement_code', codes)
-
-      if (progressError) {
-        console.error('获取进度数据失败:', progressError)
-        // 即使进度查询失败，也返回认证定义（进度为0）
-      }
-
-      // 合并数据
-      const result = definitions.map(def => {
-        const progress = progressList?.find(p => p.achievement_code === def.code)
-        return {
+      // 实时计算每个认证的进度
+      const result = []
+      for (const def of definitions) {
+        const progress = await calculateSingleProgress(memberId, def)
+        result.push({
           ...def,
-          progress: progress || {
-            current_value: 0,
-            target_value: 1,
-            progress_percent: 0,
-            is_completed: false
+          progress: {
+            current_value: progress.current_value,
+            target_value: progress.target_value,
+            progress_percent: progress.progress_percent,
+            is_completed: progress.is_completed,
+            completed_at: progress.completed_at
           }
-        }
-      })
+        })
+      }
 
       return result
     } catch (error) {
