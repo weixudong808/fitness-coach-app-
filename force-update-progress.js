@@ -86,6 +86,25 @@ async function forceUpdateProgress() {
         console.log(`     错误详情: ${JSON.stringify(error, null, 2)}`)
       } else {
         console.log(`  ✅ ${achievement.code}: ${checkInCount}/${achievement.target} (${progressPercent}%)`)
+
+        // 如果已完成，同时插入 member_achievements 表
+        if (isCompleted) {
+          const { error: achievementError } = await supabase
+            .from('member_achievements')
+            .upsert({
+              member_id: member.id,
+              achievement_code: achievement.code,
+              achieved_at: new Date().toISOString()
+            }, {
+              onConflict: 'member_id,achievement_code'
+            })
+
+          if (achievementError) {
+            console.log(`     ⚠️  插入徽章记录失败: ${achievementError.message}`)
+          } else {
+            console.log(`     🎖️  徽章已点亮`)
+          }
+        }
       }
     }
 

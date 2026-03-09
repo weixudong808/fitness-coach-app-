@@ -69,7 +69,7 @@
             <div class="achievement-progress">
               <el-progress
                 :percentage="achievement.progress?.progress_percent || 0"
-                :color="getProgressColor(achievement.progress?.progress_percent || 0)"
+                :color="achievement.progress?.is_completed ? undefined : getProgressColor(achievement.progress?.progress_percent || 0)"
                 :status="achievement.progress?.is_completed ? 'success' : undefined"
               />
             </div>
@@ -96,7 +96,7 @@
             <div class="achievement-progress">
               <el-progress
                 :percentage="achievement.progress?.progress_percent || 0"
-                :color="getProgressColor(achievement.progress?.progress_percent || 0)"
+                :color="achievement.progress?.is_completed ? undefined : getProgressColor(achievement.progress?.progress_percent || 0)"
                 :status="achievement.progress?.is_completed ? 'success' : undefined"
               />
             </div>
@@ -123,7 +123,7 @@
             <div class="achievement-progress">
               <el-progress
                 :percentage="achievement.progress?.progress_percent || 0"
-                :color="getProgressColor(achievement.progress?.progress_percent || 0)"
+                :color="achievement.progress?.is_completed ? undefined : getProgressColor(achievement.progress?.progress_percent || 0)"
                 :status="achievement.progress?.is_completed ? 'success' : undefined"
               />
             </div>
@@ -152,7 +152,7 @@
             <div class="achievement-progress">
               <el-progress
                 :percentage="achievement.progress?.progress_percent || 0"
-                :color="getProgressColor(achievement.progress?.progress_percent || 0)"
+                :color="achievement.progress?.is_completed ? undefined : getProgressColor(achievement.progress?.progress_percent || 0)"
                 :status="achievement.progress?.is_completed ? 'success' : undefined"
               />
             </div>
