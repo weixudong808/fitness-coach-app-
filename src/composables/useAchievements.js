@@ -154,6 +154,228 @@ export function useAchievements() {
   }
 
   /**
+   * 检查是否满足动作要求
+   */
+  const meetsRequirement = (actual, required) => {
+    if (!actual || !required) return false
+
+    // 去除空格，统一格式
+    const actualStr = String(actual).trim()
+    const requiredStr = String(required).trim()
+
+    // 完全匹配
+    if (actualStr === requiredStr) return true
+
+    // 尝试解析数字进行比较（支持大于等于判断）
+    const actualMatch = actualStr.match(/^(\d+(?:\.\d+)?)(.*?)$/)
+    const requiredMatch = requiredStr.match(/^(\d+(?:\.\d+)?)(.*?)$/)
+
+    if (actualMatch && requiredMatch) {
+      const actualNum = parseFloat(actualMatch[1])
+      const requiredNum = parseFloat(requiredMatch[1])
+      const actualUnit = actualMatch[2]
+      const requiredUnit = requiredMatch[2]
+
+      // 单位必须一致
+      if (actualUnit === requiredUnit) {
+        return actualNum >= requiredNum
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * 计算体能认证进度
+   */
+  const calculateExercisePerformance = async (memberId, requirement) => {
+    try {
+      // 1. 获取会员的有效训练计划
+      const { data: plans, error: plansError } = await supabase
+        .from('member_plans')
+        .select('template_id')
+        .eq('member_id', memberId)
+        .in('status', ['active', 'completed'])
+
+      if (plansError) throw plansError
+      if (!plans || plans.length === 0) return 0
+
+      const templateIds = plans.map(p => p.template_id)
+
+      // 2. 获取这些计划的所有已完成课次
+      const { data: sessions, error: sessionsError } = await supabase
+        .from('training_sessions')
+        .select('id')
+        .in('template_id', templateIds)
+        .eq('completed', true)
+
+      if (sessionsError) throw sessionsError
+      if (!sessions || sessions.length === 0) return 0
+
+      const sessionIds = sessions.map(s => s.id)
+
+      // 3. 检查每个要求的动作是否完成
+      let completedCount = 0
+      const exercises = requirement.exercises || []
+
+      for (const exercise of exercises) {
+        // 查询该动作的记录
+        const { data: exerciseRecords, error: exerciseError } = await supabase
+          .from('session_exercises')
+          .select('reps_standard')
+          .in('session_id', sessionIds)
+          .eq('exercise_name', exercise.name)
+          .limit(1)
+
+        if (exerciseError) {
+          console.error(`查询动作 ${exercise.name} 失败:`, exerciseError)
+          continue
+        }
+
+        // 检查是否达标
+        if (exerciseRecords && exerciseRecords.length > 0) {
+          const actual = exerciseRecords[0].reps_standard
+          if (meetsRequirement(actual, exercise.requirement)) {
+            completedCount++
+            console.log(`✅ ${exercise.name}: ${actual} >= ${exercise.requirement}`)
+          } else {
+            console.log(`❌ ${exercise.name}: ${actual} < ${exercise.requirement}`)
+          }
+        }
+      }
+
+      return completedCount
+    } catch (error) {
+      console.error('计算体能认证进度失败:', error)
+      return 0
+    }
+  }
+
+  /**
+   * 解析训练数据中的数值（支持时间、次数、重量等）
+   */
+  const parseTrainingValue = (valueStr) => {
+    if (!valueStr) return 0
+
+    const str = String(valueStr).trim()
+
+    // 解析时间：5分钟 -> 300秒
+    const timeMatch = str.match(/^(\d+(?:\.\d+)?)\s*分钟?$/)
+    if (timeMatch) {
+      return parseFloat(timeMatch[1]) * 60
+    }
+
+    // 解析秒：90秒 -> 90
+    const secondMatch = str.match(/^(\d+(?:\.\d+)?)\s*秒$/)
+    if (secondMatch) {
+      return parseFloat(secondMatch[1])
+    }
+
+    // 解析次数：10个 -> 10
+    const countMatch = str.match(/^(\d+(?:\.\d+)?)\s*个?$/)
+    if (countMatch) {
+      return parseFloat(countMatch[1])
+    }
+
+    // 解析重量：80kg -> 80
+    const weightMatch = str.match(/^(\d+(?:\.\d+)?)\s*kg$/)
+    if (weightMatch) {
+      return parseFloat(weightMatch[1])
+    }
+
+    // 纯数字
+    const numMatch = str.match(/^(\d+(?:\.\d+)?)$/)
+    if (numMatch) {
+      return parseFloat(numMatch[1])
+    }
+
+    return 0
+  }
+
+  /**
+   * 计算动作组认证进度（exercise_group）
+   */
+  const calculateExerciseGroup = async (memberId, requirement) => {
+    try {
+      // 1. 获取会员信息（需要性别来判断目标值）
+      const { data: member, error: memberError } = await supabase
+        .from('members')
+        .select('gender')
+        .eq('id', memberId)
+        .single()
+
+      if (memberError) throw memberError
+      if (!member) return 0
+
+      const isMale = member.gender === 'male'
+
+      // 2. 获取会员的有效训练计划
+      const { data: plans, error: plansError } = await supabase
+        .from('member_plans')
+        .select('template_id')
+        .eq('member_id', memberId)
+        .in('status', ['active', 'completed'])
+
+      if (plansError) throw plansError
+      if (!plans || plans.length === 0) return 0
+
+      const templateIds = plans.map(p => p.template_id)
+
+      // 3. 获取这些计划的所有已完成课次
+      const { data: sessions, error: sessionsError } = await supabase
+        .from('training_sessions')
+        .select('id')
+        .in('template_id', templateIds)
+        .eq('completed', true)
+
+      if (sessionsError) throw sessionsError
+      if (!sessions || sessions.length === 0) return 0
+
+      const sessionIds = sessions.map(s => s.id)
+
+      // 4. 检查每个要求的动作是否完成
+      let completedCount = 0
+      const exercises = requirement.exercises || []
+
+      for (const exercise of exercises) {
+        // 根据性别确定目标值
+        const targetValue = isMale ? exercise.target_male : exercise.target_female
+
+        // 查询该动作的记录
+        const { data: exerciseRecords, error: exerciseError } = await supabase
+          .from('session_exercises')
+          .select('reps_standard')
+          .in('session_id', sessionIds)
+          .eq('exercise_name', exercise.name)
+          .limit(1)
+
+        if (exerciseError) {
+          console.error(`查询动作 ${exercise.name} 失败:`, exerciseError)
+          continue
+        }
+
+        // 检查是否达标
+        if (exerciseRecords && exerciseRecords.length > 0) {
+          const actualStr = exerciseRecords[0].reps_standard
+          const actualValue = parseTrainingValue(actualStr)
+
+          if (actualValue >= targetValue) {
+            completedCount++
+            console.log(`✅ ${exercise.name}: ${actualStr} (${actualValue}) >= ${targetValue}`)
+          } else {
+            console.log(`❌ ${exercise.name}: ${actualStr} (${actualValue}) < ${targetValue}`)
+          }
+        }
+      }
+
+      return completedCount
+    } catch (error) {
+      console.error('计算动作组认证进度失败:', error)
+      return 0
+    }
+  }
+
+  /**
    * 计算单个认证的进度
    */
   const calculateSingleProgress = async (memberId, achievement) => {
@@ -182,15 +404,15 @@ export function useAchievements() {
           break
 
         case 'exercise_performance':
-          // 动作表现认证（暂时简化处理）
+          // 体能认证：计算已完成的动作数量
+          currentValue = await calculateExercisePerformance(memberId, requirement)
           targetValue = requirement.target
-          currentValue = 0 // 需要教练手动标记完成
           break
 
         case 'exercise_group':
-          // 动作组认证（暂时简化处理）
+          // 动作组认证：计算已完成的动作数量
+          currentValue = await calculateExerciseGroup(memberId, requirement)
           targetValue = requirement.exercises?.length || 1
-          currentValue = 0 // 需要教练手动标记完成
           break
 
         case 'body_metric':

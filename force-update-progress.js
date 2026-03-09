@@ -65,7 +65,7 @@ async function forceUpdateProgress() {
       const progressPercent = Math.min(Math.round((checkInCount / achievement.target) * 100), 100)
       const isCompleted = checkInCount >= achievement.target
 
-      await supabase
+      const { data, error } = await supabase
         .from('member_achievement_progress')
         .upsert({
           member_id: member.id,
@@ -80,7 +80,13 @@ async function forceUpdateProgress() {
           onConflict: 'member_id,achievement_code'
         })
 
-      console.log(`  ✅ ${achievement.code}: ${checkInCount}/${achievement.target} (${progressPercent}%)`)
+      if (error) {
+        console.log(`  ❌ ${achievement.code}: 更新失败`)
+        console.log(`     错误信息: ${error.message}`)
+        console.log(`     错误详情: ${JSON.stringify(error, null, 2)}`)
+      } else {
+        console.log(`  ✅ ${achievement.code}: ${checkInCount}/${achievement.target} (${progressPercent}%)`)
+      }
     }
 
     console.log('\n✅ 认证进度更新完成！')
