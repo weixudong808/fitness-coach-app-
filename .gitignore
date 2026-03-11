@@ -70,3 +70,4 @@ add-*.cjs
 restore-*.cjs
 delete-*.cjs
 check-*.cjs
+create_member.js
