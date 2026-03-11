@@ -29,6 +29,25 @@ export function useAchievements() {
   }
 
   /**
+   * 获取会员性别
+   */
+  const getMemberGender = async (memberId) => {
+    try {
+      const { data: member, error } = await supabase
+        .from('members')
+        .select('gender')
+        .eq('id', memberId)
+        .single()
+
+      if (error) throw error
+      return member?.gender || 'male' // 默认返回男性
+    } catch (error) {
+      console.error('获取会员性别失败:', error)
+      return 'male'
+    }
+  }
+
+  /**
    * 获取所有认证定义
    */
   const getAchievementDefinitions = async () => {
@@ -163,7 +182,157 @@ export function useAchievements() {
   }
 
   /**
-   * 检查是否满足动作要求
+   * 解析中文数字
+   */
+  const parseChineseNumber = (str) => {
+    const chineseMap = {
+      '零': 0, '一': 1, '二': 2, '三': 3, '四': 4,
+      '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+      '十': 10, '百': 100, '千': 1000
+    }
+
+    // 处理"点"作为小数点
+    if (str.includes('点')) {
+      const parts = str.split('点')
+      const intPart = parseChineseNumber(parts[0])
+      const decPart = parseChineseNumber(parts[1])
+      return intPart + decPart / 10
+    }
+
+    let result = 0
+    let temp = 0
+    let unit = 1
+
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i]
+      const num = chineseMap[char]
+
+      if (num !== undefined) {
+        if (num >= 10) {
+          // 单位（十、百、千）
+          if (temp === 0) temp = 1
+          unit = num
+          result += temp * unit
+          temp = 0
+          unit = 1
+        } else {
+          // 数字
+          temp = num
+        }
+      }
+    }
+
+    result += temp
+    return result
+  }
+
+  /**
+   * 解析复杂的时间格式
+   * 支持：90秒、1分30秒、1.5分钟、一分三十秒、一分30秒、一点五分
+   */
+  const parseComplexTime = (timeStr) => {
+    if (!timeStr) return 0
+
+    const str = String(timeStr).trim()
+    let totalSeconds = 0
+
+    // 1. 处理混合格式：1分30秒、一分三十秒、一分30秒
+    const mixedMatch = str.match(/^(.+?)分(.+?)秒$/)
+    if (mixedMatch) {
+      const minutePart = mixedMatch[1]
+      const secondPart = mixedMatch[2]
+
+      // 解析分钟部分（可能是数字或中文）
+      let minutes = 0
+      if (/^\d+$/.test(minutePart)) {
+        minutes = parseInt(minutePart)
+      } else if (/^[\u4e00-\u9fa5]+$/.test(minutePart)) {
+        minutes = parseChineseNumber(minutePart)
+      } else if (/^\d+\.\d+$/.test(minutePart)) {
+        minutes = parseFloat(minutePart)
+      }
+
+      // 解析秒部分（可能是数字或中文）
+      let seconds = 0
+      if (/^\d+$/.test(secondPart)) {
+        seconds = parseInt(secondPart)
+      } else if (/^[\u4e00-\u9fa5]+$/.test(secondPart)) {
+        seconds = parseChineseNumber(secondPart)
+      } else if (/^\d+\.\d+$/.test(secondPart)) {
+        seconds = parseFloat(secondPart)
+      }
+
+      return minutes * 60 + seconds
+    }
+
+    // 2. 处理纯分钟：1.5分钟、一点五分、1分、一分
+    const minuteMatch = str.match(/^(.+?)分钟?$/)
+    if (minuteMatch) {
+      const minutePart = minuteMatch[1]
+
+      // 数字格式：1.5
+      if (/^\d+(\.\d+)?$/.test(minutePart)) {
+        return parseFloat(minutePart) * 60
+      }
+
+      // 中文格式：一点五
+      if (/^[\u4e00-\u9fa5]+$/.test(minutePart)) {
+        return parseChineseNumber(minutePart) * 60
+      }
+    }
+
+    // 3. 处理纯秒：90秒、九十秒
+    const secondMatch = str.match(/^(.+?)秒$/)
+    if (secondMatch) {
+      const secondPart = secondMatch[1]
+
+      // 数字格式：90
+      if (/^\d+(\.\d+)?$/.test(secondPart)) {
+        return parseFloat(secondPart)
+      }
+
+      // 中文格式：九十
+      if (/^[\u4e00-\u9fa5]+$/.test(secondPart)) {
+        return parseChineseNumber(secondPart)
+      }
+    }
+
+    // 4. 纯数字（默认为秒）
+    if (/^\d+(\.\d+)?$/.test(str)) {
+      return parseFloat(str)
+    }
+
+    return 0
+  }
+
+  /**
+   * 将时间转换为秒（保留旧函数以兼容）
+   */
+  const convertToSeconds = (value, unit) => {
+    const num = parseFloat(value)
+    const unitLower = unit.toLowerCase().trim()
+
+    // 分钟转秒
+    if (unitLower.includes('分钟') || unitLower === 'min' || unitLower === 'mins') {
+      return num * 60
+    }
+
+    // 秒
+    if (unitLower.includes('秒') || unitLower === 's' || unitLower === 'sec') {
+      return num
+    }
+
+    // 小时转秒
+    if (unitLower.includes('小时') || unitLower === 'h' || unitLower === 'hour') {
+      return num * 3600
+    }
+
+    // 默认返回原值
+    return num
+  }
+
+  /**
+   * 检查是否满足动作要求（支持复杂时间格式）
    */
   const meetsRequirement = (actual, required) => {
     if (!actual || !required) return false
@@ -175,6 +344,22 @@ export function useAchievements() {
     // 完全匹配
     if (actualStr === requiredStr) return true
 
+    // 特殊处理：如果要求是 "0"，只要有实际值就算达标（用于柔韧性等不限次数的动作）
+    if (requiredStr === '0' && actualStr) {
+      console.log(`✅ 特殊判断: ${actualStr} 存在即达标（要求为0）`)
+      return true
+    }
+
+    // 尝试解析为复杂时间格式
+    const actualSeconds = parseComplexTime(actualStr)
+    const requiredSeconds = parseComplexTime(requiredStr)
+
+    // 如果都能解析为时间（大于0），则比较秒数
+    if (actualSeconds > 0 && requiredSeconds > 0) {
+      console.log(`⏱️ 时间比较: ${actualStr} (${actualSeconds}秒) >= ${requiredStr} (${requiredSeconds}秒)`)
+      return actualSeconds >= requiredSeconds
+    }
+
     // 尝试解析数字进行比较（支持大于等于判断）
     const actualMatch = actualStr.match(/^(\d+(?:\.\d+)?)(.*?)$/)
     const requiredMatch = requiredStr.match(/^(\d+(?:\.\d+)?)(.*?)$/)
@@ -185,9 +370,20 @@ export function useAchievements() {
       const actualUnit = actualMatch[2]
       const requiredUnit = requiredMatch[2]
 
-      // 单位必须一致
+      // 单位一致，直接比较
       if (actualUnit === requiredUnit) {
         return actualNum >= requiredNum
+      }
+
+      // 单位不一致，尝试时间单位转换
+      const isActualTime = actualUnit.includes('秒') || actualUnit.includes('分钟') || actualUnit.includes('小时')
+      const isRequiredTime = requiredUnit.includes('秒') || requiredUnit.includes('分钟') || requiredUnit.includes('小时')
+
+      if (isActualTime && isRequiredTime) {
+        // 都是时间单位，转换为秒后比较
+        const actualSeconds = convertToSeconds(actualNum, actualUnit)
+        const requiredSeconds = convertToSeconds(requiredNum, requiredUnit)
+        return actualSeconds >= requiredSeconds
       }
     }
 
@@ -228,12 +424,12 @@ export function useAchievements() {
       const exercises = requirement.exercises || []
 
       for (const exercise of exercises) {
-        // 查询该动作的记录
+        // 查询该动作的记录（使用 ilike 支持大小写不敏感匹配）
         const { data: exerciseRecords, error: exerciseError } = await supabase
           .from('session_exercises')
           .select('reps_standard')
           .in('session_id', sessionIds)
-          .eq('exercise_name', exercise.name)
+          .ilike('exercise_name', exercise.name)
           .limit(1)
 
         if (exerciseError) {
@@ -350,12 +546,12 @@ export function useAchievements() {
         // 根据性别确定目标值
         const targetValue = isMale ? exercise.target_male : exercise.target_female
 
-        // 查询该动作的记录
+        // 查询该动作的记录（使用 ilike 支持大小写不敏感匹配）
         const { data: exerciseRecords, error: exerciseError } = await supabase
           .from('session_exercises')
           .select('reps_standard')
           .in('session_id', sessionIds)
-          .eq('exercise_name', exercise.name)
+          .ilike('exercise_name', exercise.name)
           .limit(1)
 
         if (exerciseError) {
@@ -385,6 +581,40 @@ export function useAchievements() {
   }
 
   /**
+   * 计算认证组进度（统计子认证完成情况）
+   */
+  const calculateAchievementGroup = async (memberId, requirement) => {
+    try {
+      const subAchievementCodes = requirement.sub_achievements || []
+      if (subAchievementCodes.length === 0) return 0
+
+      // 获取所有子认证的定义
+      const { data: subAchievements, error } = await supabase
+        .from('achievement_definitions')
+        .select('*')
+        .in('code', subAchievementCodes)
+        .eq('is_active', true)
+
+      if (error) throw error
+      if (!subAchievements || subAchievements.length === 0) return 0
+
+      // 计算每个子认证的进度
+      let completedCount = 0
+      for (const subAchievement of subAchievements) {
+        const progress = await calculateSingleProgress(memberId, subAchievement)
+        if (progress.is_completed) {
+          completedCount++
+        }
+      }
+
+      return completedCount
+    } catch (error) {
+      console.error('计算认证组进度失败:', error)
+      return 0
+    }
+  }
+
+  /**
    * 计算单个认证的进度
    */
   const calculateSingleProgress = async (memberId, achievement) => {
@@ -393,6 +623,14 @@ export function useAchievements() {
     let targetValue = 0
 
     try {
+      // 先查询数据库中是否已有进度记录
+      const { data: existingProgress } = await supabase
+        .from('member_achievement_progress')
+        .select('completed_at, is_completed')
+        .eq('member_id', memberId)
+        .eq('achievement_code', achievement.code)
+        .single()
+
       switch (requirement.type) {
         case 'register':
           // 注册认证：只要会员存在就算完成
@@ -432,8 +670,8 @@ export function useAchievements() {
 
         case 'achievement_group':
           // 认证组（需要完成一组认证）
-          targetValue = requirement.target === 'all' ? 100 : requirement.target
-          currentValue = 0 // 需要根据子认证计算
+          currentValue = await calculateAchievementGroup(memberId, requirement)
+          targetValue = requirement.sub_achievements?.length || 1
           break
 
         default:
@@ -447,13 +685,29 @@ export function useAchievements() {
 
       const isCompleted = currentValue >= targetValue && targetValue > 0
 
+      // 决定 completed_at 的值
+      let completedAt = null
+      if (isCompleted) {
+        // 如果现在达标了
+        if (existingProgress && existingProgress.completed_at) {
+          // 之前已经完成过，保持原来的时间（不变）
+          completedAt = existingProgress.completed_at
+        } else {
+          // 之前没完成过，设置新的完成时间
+          completedAt = new Date().toISOString()
+        }
+      } else {
+        // 如果现在不达标，清除完成时间
+        completedAt = null
+      }
+
       return {
         achievement_code: achievement.code,
         current_value: currentValue,
         target_value: targetValue,
         progress_percent: progressPercent,
         is_completed: isCompleted,
-        completed_at: isCompleted ? new Date().toISOString() : null
+        completed_at: completedAt
       }
     } catch (error) {
       console.error(`计算认证进度失败 [${achievement.code}]:`, error)
@@ -696,7 +950,29 @@ export function useAchievements() {
   }
 
   /**
-   * 按类别获取认证（实时计算进度）
+   * 根据性别过滤认证（基于 code 命名规则）
+   */
+  const filterByGender = (definitions, gender) => {
+    return definitions.filter(def => {
+      const code = def.code.toLowerCase()
+
+      // 如果 code 包含 _male，只显示给男生
+      if (code.includes('_male')) {
+        return gender === 'male'
+      }
+
+      // 如果 code 包含 _female，只显示给女生
+      if (code.includes('_female')) {
+        return gender === 'female'
+      }
+
+      // 其他认证显示给所有人
+      return true
+    })
+  }
+
+  /**
+   * 按类别获取认证（实时计算进度，根据性别过滤）
    */
   const getAchievementsByCategory = async (memberId, category) => {
     try {
@@ -715,9 +991,18 @@ export function useAchievements() {
 
       if (!definitions || definitions.length === 0) return []
 
+      // 获取会员性别
+      const gender = await getMemberGender(memberId)
+
+      // 根据性别过滤认证（仅对体能认证类别）
+      let filteredDefinitions = definitions
+      if (category === 'basic_fitness' || category === 'advanced_fitness') {
+        filteredDefinitions = filterByGender(definitions, gender)
+      }
+
       // 实时计算每个认证的进度
       const result = []
-      for (const def of definitions) {
+      for (const def of filteredDefinitions) {
         const progress = await calculateSingleProgress(memberId, def)
         result.push({
           ...def,
@@ -840,6 +1125,7 @@ export function useAchievements() {
     memberLevel,
     progressData,
     getCurrentMemberId,
+    getMemberGender,
     getAchievementDefinitions,
     calculateProgress,
     updateProgress,

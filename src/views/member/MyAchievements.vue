@@ -18,14 +18,14 @@
     <el-card class="level-card" v-loading="loading">
       <div class="level-header">
         <div class="level-info">
-          <div class="level-badge">Lv.{{ memberLevel?.current_level || 1 }}</div>
+          <div class="level-badge">Lv.{{ calculatedLevel.level }}</div>
           <div class="level-details">
-            <h2>{{ memberLevel?.level_name || '新手' }}</h2>
-            <p>已获得 {{ memberLevel?.total_achievements || 0 }} 个认证</p>
+            <h2>{{ calculatedLevel.name }}</h2>
+            <p>已点亮 {{ achievedBadgeCount }} 个徽章</p>
           </div>
         </div>
         <div class="experience-info">
-          <span class="exp-text">经验值: {{ memberLevel?.experience_points || 0 }}</span>
+          <span class="exp-text">经验值: {{ calculatedExperience }}</span>
         </div>
       </div>
 
@@ -201,6 +201,7 @@ const {
   loading,
   memberLevel,
   getCurrentMemberId,
+  getMemberGender,
   getMemberLevel,
   getAchievementsByCategory,
   getAllProgress,
@@ -215,11 +216,42 @@ const advancedFitnessAchievements = ref([])
 const allAchievements = ref([])
 const achievedList = ref([])
 
-// 整体进度（基于已获得认证数量）
+// 统计已点亮的徽章数量
+const achievedBadgeCount = computed(() => {
+  const activeAchievements = allAchievements.value.filter(a => a.is_active)
+  return activeAchievements.filter(a => a.progress?.is_completed === true).length
+})
+
+// 统计激活的徽章总数
+const totalBadgeCount = computed(() => {
+  return allAchievements.value.filter(a => a.is_active).length
+})
+
+// 整体进度（基于徽章墙中已点亮的徽章数量）
 const overallProgress = computed(() => {
-  const total = allAchievements.value.filter(a => a.is_active).length
-  const achieved = achievedList.value.length
+  const total = totalBadgeCount.value
+  const achieved = achievedBadgeCount.value
   return total > 0 ? Math.round((achieved / total) * 100) : 0
+})
+
+// 根据已点亮徽章数计算等级
+const calculatedLevel = computed(() => {
+  const count = achievedBadgeCount.value
+
+  if (count >= 20) return { level: 9, name: '自主训练者' }
+  if (count >= 15) return { level: 8, name: '高级训练者' }
+  if (count >= 10) return { level: 7, name: '进阶训练者' }
+  if (count >= 7) return { level: 6, name: '中级训练者' }
+  if (count >= 5) return { level: 5, name: '基础训练者' }
+  if (count >= 3) return { level: 4, name: '初级训练者' }
+  if (count >= 2) return { level: 3, name: '入门训练者' }
+  if (count >= 1) return { level: 2, name: '新手训练者' }
+  return { level: 1, name: '新手' }
+})
+
+// 根据已点亮徽章数计算经验值
+const calculatedExperience = computed(() => {
+  return achievedBadgeCount.value * 100
 })
 
 // 加载数据
@@ -305,8 +337,8 @@ const getProgressColor = (percent) => {
 
 // 获取进度提示
 const getProgressHint = () => {
-  const level = memberLevel.value?.current_level || 1
-  const total = memberLevel.value?.total_achievements || 0
+  const level = calculatedLevel.value.level
+  const achieved = achievedBadgeCount.value
 
   if (level >= 9) {
     return '🎉 恭喜你已经是自主训练者！'
