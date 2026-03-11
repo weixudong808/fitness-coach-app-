@@ -42,3 +42,31 @@ lerna-debug.log*
 
 # 上传文件
 .codepilot-uploads/
+
+# 测试脚本（包含敏感信息）
+*.test.js
+*-test.js
+test-*.js
+check-*.js
+check_*.js
+query-*.js
+query_*.js
+list-*.js
+list_*.js
+create-*.js
+delete-*.js
+reset-*.js
+init-*.js
+import-*.js
+verify-*.js
+rollback-*.js
+simulate-*.js
+force-*.js
+fix-*.js
+debug-*.js
+analyze-*.js
+add-*.js
+add-*.cjs
+restore-*.cjs
+delete-*.cjs
+check-*.cjs
