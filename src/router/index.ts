@@ -6,12 +6,24 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      redirect: '/login'
+      redirect: '/member/auth'
     },
     {
       path: '/login',
       name: 'login',
       component: () => import('../views/Login.vue')
+    },
+    // 教练认证（注册/登录）
+    {
+      path: '/coach/auth',
+      name: 'coach-auth',
+      component: () => import('../views/CoachAuth.vue')
+    },
+    // 会员认证（注册/登录）
+    {
+      path: '/member/auth',
+      name: 'member-auth',
+      component: () => import('../views/MemberAuth.vue')
     },
     {
       path: '/dashboard',
@@ -25,6 +37,11 @@ const router = createRouter({
       name: 'coach',
       meta: { requiresAuth: true, role: 'coach' },
       children: [
+        {
+          path: 'invite-code',
+          name: 'coach-invite-code',
+          component: () => import('../views/coach/InviteCode.vue')
+        },
         {
           path: 'members',
           name: 'coach-members',
@@ -78,6 +95,11 @@ const router = createRouter({
       name: 'member',
       meta: { requiresAuth: true, role: 'member' },
       children: [
+        {
+          path: 'home',
+          name: 'member-home',
+          component: () => import('../views/member/MemberHome.vue')
+        },
         {
           path: 'plan',
           name: 'member-plan',

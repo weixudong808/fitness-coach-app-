@@ -1,18 +1,16 @@
 <template>
   <div class="my-plan-container">
-    <!-- 顶部导航菜单 -->
-    <el-menu
-      :default-active="activeMenu"
-      mode="horizontal"
-      @select="handleMenuSelect"
-      style="margin-bottom: 20px;"
-    >
-      <el-menu-item index="plan">我的训练计划</el-menu-item>
-      <el-menu-item index="progress">我的进步</el-menu-item>
-      <el-menu-item index="achievements">我的认证</el-menu-item>
-      <div style="flex: 1;"></div>
-      <el-button type="danger" @click="handleLogout" style="margin: 12px 20px;">退出登录</el-button>
-    </el-menu>
+    <!-- 顶部导航 -->
+    <div class="header">
+      <h1>会员中心</h1>
+      <div class="nav-menu">
+        <button @click="goToPage('/member/home')" class="nav-btn">首页</button>
+        <button @click="goToPage('/member/plan')" class="nav-btn active">训练计划</button>
+        <button @click="goToPage('/member/progress')" class="nav-btn">我的进步</button>
+        <button @click="goToPage('/member/achievements')" class="nav-btn">我的认证</button>
+      </div>
+      <button @click="handleLogout" class="logout-btn">退出登录</button>
+    </div>
 
     <el-card>
       <template #header>
@@ -190,6 +188,11 @@ const formatDate = (dateString) => {
   return date.toLocaleDateString('zh-CN')
 }
 
+// 跳转到指定页面
+const goToPage = (path) => {
+  router.push(path)
+}
+
 // 退出登录
 const handleLogout = async () => {
   const result = await signOut()
@@ -208,7 +211,69 @@ onMounted(() => {
 
 <style scoped>
 .my-plan-container {
+  min-height: 100vh;
+  background: #f5f7fa;
   padding: 20px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  gap: 20px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #333;
+}
+
+.nav-menu {
+  display: flex;
+  gap: 10px;
+  flex: 1;
+  justify-content: center;
+}
+
+.nav-btn {
+  padding: 8px 16px;
+  background: #f5f7fa;
+  color: #333;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.nav-btn:hover {
+  background: #e8edf3;
+}
+
+.nav-btn.active {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+}
+
+.logout-btn {
+  padding: 10px 20px;
+  background: #f5576c;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+.logout-btn:hover {
+  opacity: 0.8;
 }
 
 .card-header {
