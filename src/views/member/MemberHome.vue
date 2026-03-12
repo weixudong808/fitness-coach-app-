@@ -155,7 +155,8 @@ const loadCoaches = async () => {
 
   const result = await getMemberCoaches(userId)
   if (result.success) {
-    coaches.value = result.data
+    // 提取教练信息
+    coaches.value = result.data.map((item: any) => item.coaches)
   }
 }
 
