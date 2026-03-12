@@ -67,8 +67,12 @@ const messageType = ref('success')
 const loadPendingCoaches = async () => {
   loading.value = true
   try {
-    const coaches = await getPendingCoaches()
-    pendingCoaches.value = coaches
+    const result = await getPendingCoaches()
+    if (result.success) {
+      pendingCoaches.value = result.data
+    } else {
+      showMessage('加载失败：' + result.error, 'error')
+    }
   } catch (error) {
     showMessage('加载失败：' + error.message, 'error')
   } finally {
@@ -79,9 +83,13 @@ const loadPendingCoaches = async () => {
 // 通过审核
 const handleApprove = async (coachId) => {
   try {
-    await auditCoach(coachId, 'approved')
-    showMessage('审核通过！', 'success')
-    await loadPendingCoaches()
+    const result = await auditCoach(coachId, 'approved')
+    if (result.success) {
+      showMessage('审核通过！', 'success')
+      await loadPendingCoaches()
+    } else {
+      showMessage('操作失败：' + result.error, 'error')
+    }
   } catch (error) {
     showMessage('操作失败：' + error.message, 'error')
   }
@@ -90,9 +98,13 @@ const handleApprove = async (coachId) => {
 // 拒绝审核
 const handleReject = async (coachId) => {
   try {
-    await auditCoach(coachId, 'rejected')
-    showMessage('已拒绝该教练申请', 'success')
-    await loadPendingCoaches()
+    const result = await auditCoach(coachId, 'rejected')
+    if (result.success) {
+      showMessage('已拒绝该教练申请', 'success')
+      await loadPendingCoaches()
+    } else {
+      showMessage('操作失败：' + result.error, 'error')
+    }
   } catch (error) {
     showMessage('操作失败：' + error.message, 'error')
   }

@@ -151,12 +151,13 @@ const handleSubmit = async () => {
         localStorage.setItem('userType', 'coach')
         localStorage.setItem('userId', result.data.id)
         localStorage.setItem('userName', result.data.name)
+        localStorage.setItem('coachData', JSON.stringify(result.data))
 
         successMessage.value = '登录成功！'
 
         // 跳转到教练端首页
         setTimeout(() => {
-          router.push('/coach/members')
+          router.push('/coach/invite-code')
         }, 1000)
       } else {
         errorMessage.value = result.error || '登录失败'

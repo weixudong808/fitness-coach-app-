@@ -147,7 +147,12 @@ const isMyCoach = (coachId) => {
 const loadCoaches = async () => {
   loading.value = true
   try {
-    coaches.value = await getCoachList()
+    const result = await getCoachList()
+    if (result.success) {
+      coaches.value = result.data
+    } else {
+      showMessage('加载失败：' + result.error, 'error')
+    }
   } catch (error) {
     showMessage('加载失败：' + error.message, 'error')
   } finally {
@@ -160,7 +165,11 @@ const loadMyCoaches = async () => {
   try {
     const memberId = getMemberId()
     if (!memberId) return
-    myCoaches.value = await getMemberCoaches(memberId)
+    const result = await getMemberCoaches(memberId)
+    if (result.success) {
+      // 提取教练信息
+      myCoaches.value = result.data.map(item => item.coaches)
+    }
   } catch (error) {
     console.error('加载我的教练失败：', error)
   }

@@ -199,7 +199,13 @@ const loadMembers = async () => {
       router.push('/coach/auth')
       return
     }
-    members.value = await getCoachMembers(coachId)
+    const result = await getCoachMembers(coachId)
+    if (result.success) {
+      // 提取会员信息
+      members.value = result.data.map(item => item.members)
+    } else {
+      showMessage('加载失败：' + result.error, 'error')
+    }
   } catch (error) {
     showMessage('加载失败：' + error.message, 'error')
   } finally {
@@ -213,7 +219,12 @@ const loadPendingRequests = async () => {
   try {
     const coachId = getCoachId()
     if (!coachId) return
-    pendingRequests.value = await getCoachPendingRequests(coachId)
+    const result = await getCoachPendingRequests(coachId)
+    if (result.success) {
+      pendingRequests.value = result.data
+    } else {
+      showMessage('加载失败：' + result.error, 'error')
+    }
   } catch (error) {
     showMessage('加载失败：' + error.message, 'error')
   } finally {
@@ -225,7 +236,12 @@ const loadPendingRequests = async () => {
 const loadUnclaimedMembers = async () => {
   loading.value = true
   try {
-    unclaimedMembers.value = await getUnclaimedMembers()
+    const result = await getUnclaimedMembers()
+    if (result.success) {
+      unclaimedMembers.value = result.data
+    } else {
+      showMessage('加载失败：' + result.error, 'error')
+    }
   } catch (error) {
     showMessage('加载失败：' + error.message, 'error')
   } finally {
