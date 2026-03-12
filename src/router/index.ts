@@ -45,7 +45,7 @@ const router = createRouter({
         {
           path: 'members',
           name: 'coach-members',
-          component: () => import('../views/coach/MemberList.vue')
+          component: () => import('../views/coach/CoachMembers.vue')
         },
         {
           path: 'members/:id',
@@ -89,6 +89,18 @@ const router = createRouter({
         }
       ]
     },
+    // 管理员端路由
+    {
+      path: '/admin/login',
+      name: 'admin-login',
+      component: () => import('../views/admin/AdminLogin.vue')
+    },
+    {
+      path: '/admin/audit',
+      name: 'admin-audit',
+      component: () => import('../views/admin/CoachAudit.vue'),
+      meta: { requiresAuth: true, role: 'admin' }
+    },
     // 会员端路由
     {
       path: '/member',
@@ -129,6 +141,11 @@ const router = createRouter({
           path: 'achievements',
           name: 'member-achievements',
           component: () => import('../views/member/MyAchievements.vue')
+        },
+        {
+          path: 'coaches',
+          name: 'member-coaches',
+          component: () => import('../views/member/CoachList.vue')
         }
       ]
     }

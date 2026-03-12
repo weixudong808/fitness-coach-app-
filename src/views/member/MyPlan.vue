@@ -8,6 +8,7 @@
         <button @click="goToPage('/member/plan')" class="nav-btn active">训练计划</button>
         <button @click="goToPage('/member/progress')" class="nav-btn">我的进步</button>
         <button @click="goToPage('/member/achievements')" class="nav-btn">我的认证</button>
+        <button @click="goToPage('/member/coaches')" class="nav-btn">查找教练</button>
       </div>
       <button @click="handleLogout" class="logout-btn">退出登录</button>
     </div>
