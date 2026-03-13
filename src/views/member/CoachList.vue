@@ -104,9 +104,11 @@ import { useRouter } from 'vue-router'
 import {
   getCoachList,
   memberApplyCoach,
-  useInviteCode,
-  getMemberCoaches
+  useInviteCode
 } from '@/lib/api'
+import {
+  getMemberCoaches
+} from '@/lib/api-relations'
 
 const router = useRouter()
 const loading = ref(false)

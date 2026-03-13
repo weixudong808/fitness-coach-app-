@@ -163,13 +163,15 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  getCoachMembers,
-  getCoachPendingRequests,
   getUnclaimedMembers,
   coachAuditMemberApply,
-  coachAddMember,
-  coachDeleteMember
+  coachAddMember
 } from '@/lib/api'
+import {
+  getCoachMembers,
+  getCoachPendingRequests,
+  coachDeleteMember
+} from '@/lib/api-relations'
 
 const router = useRouter()
 const activeTab = ref('members')
