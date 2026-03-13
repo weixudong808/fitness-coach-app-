@@ -1,3 +1,12 @@
+/**
+ * Edge Functions 调用封装
+ *
+ * ⚠️ 安全警告：
+ * - adminAuditCoach: 仅允许管理员页面调用，普通用户页面禁止调用
+ * - 所有使用 VITE_INTERNAL_SECRET 的函数都应严格控制调用权限
+ * - 建议后续将内部函数移至服务端目录或移除前端导出
+ */
+
 // Edge Functions 调用辅助函数
 // 用于调用 Supabase Edge Functions
 

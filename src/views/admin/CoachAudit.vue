@@ -55,7 +55,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getPendingCoaches, auditCoach } from '@/lib/api'
+import { getPendingCoaches } from '@/lib/api'
+import { adminAuditCoach } from '@/lib/edge-functions'
 
 const router = useRouter()
 const loading = ref(false)
@@ -83,7 +84,7 @@ const loadPendingCoaches = async () => {
 // 通过审核
 const handleApprove = async (coachId) => {
   try {
-    const result = await auditCoach(coachId, 'approved')
+    const result = await adminAuditCoach(coachId, 'approved')
     if (result.success) {
       showMessage('审核通过！', 'success')
       await loadPendingCoaches()
@@ -97,8 +98,14 @@ const handleApprove = async (coachId) => {
 
 // 拒绝审核
 const handleReject = async (coachId) => {
+  const reason = prompt('请输入拒绝原因：')
+  if (!reason) {
+    showMessage('请输入拒绝原因', 'error')
+    return
+  }
+
   try {
-    const result = await auditCoach(coachId, 'rejected')
+    const result = await adminAuditCoach(coachId, 'rejected', reason)
     if (result.success) {
       showMessage('已拒绝该教练申请', 'success')
       await loadPendingCoaches()

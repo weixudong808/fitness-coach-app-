@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -152,13 +153,46 @@ const router = createRouter({
   ]
 })
 
-// 路由守卫
-router.beforeEach((to, from) => {
-  // 这里暂时简化处理，后续会完善认证逻辑
+// 路由守卫（实现真正的认证检查）
+router.beforeEach(async (to, from) => {
+  // 如果路由需要认证
   if (to.meta.requiresAuth) {
-    // TODO: 检查用户是否已登录
-    return true
+    const { isAuthenticated, getCurrentUser } = useAuth()
+
+    // 检查用户是否已登录
+    const authenticated = await isAuthenticated()
+
+    if (!authenticated) {
+      // 未登录，根据角色跳转到对应的登录页
+      const role = to.meta.role as string
+
+      if (role === 'coach') {
+        return { name: 'coach-auth' }
+      } else if (role === 'member') {
+        return { name: 'member-auth' }
+      } else if (role === 'admin') {
+        return { name: 'admin-login' }
+      } else {
+        return { name: 'member-auth' }
+      }
+    }
+
+    // 已登录，检查角色是否匹配
+    const user = await getCurrentUser()
+    const requiredRole = to.meta.role as string
+
+    if (requiredRole && user && user.userType !== requiredRole) {
+      // 角色不匹配，跳转到对应角色的首页
+      if (user.userType === 'coach') {
+        return { name: 'coach-invite-code' }
+      } else if (user.userType === 'member') {
+        return { name: 'member-home' }
+      } else if (user.userType === 'admin') {
+        return { name: 'admin-audit' }
+      }
+    }
   }
+
   return true
 })
 

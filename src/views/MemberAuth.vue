@@ -128,7 +128,8 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { registerMember, loginMember } from '@/lib/api'
+import { loginMember, registerMemberWithAuth, loginMemberWithAuth } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 
 const router = useRouter()
 const isLogin = ref(true)
@@ -179,55 +180,92 @@ const handleSubmit = async () => {
 
   try {
     if (isLogin.value) {
-      // 登录
-      const result = await loginMember(formData.phone, formData.password)
-
-      if (result.success) {
-        // 保存会员信息到 localStorage
-        localStorage.setItem('userType', 'member')
-        localStorage.setItem('userId', result.data.id)
-        localStorage.setItem('userName', result.data.name)
-        localStorage.setItem('userGender', result.data.gender)
-
-        successMessage.value = '登录成功！'
-
-        // 跳转到会员端首页
-        setTimeout(() => {
-          router.push('/member/home')
-        }, 1000)
-      } else {
-        errorMessage.value = result.error || '登录失败'
-      }
+      // 登录：先尝试新方式（Supabase Auth），失败再尝试旧方式
+      await handleLogin()
     } else {
-      // 注册
-      const result = await registerMember({
-        name: formData.name,
-        phone: formData.phone,
-        password: formData.password,
-        gender: formData.gender,
-        initial_weight: formData.initial_weight,
-        invite_code: formData.invite_code
-      })
-
-      if (result.success) {
-        if (result.warning) {
-          successMessage.value = result.warning
-        } else {
-          successMessage.value = '注册成功！'
-        }
-
-        // 3秒后切换到登录模式
-        setTimeout(() => {
-          toggleMode()
-        }, 3000)
-      } else {
-        errorMessage.value = result.error || '注册失败'
-      }
+      // 注册：使用新方式（Supabase Auth）
+      await handleRegister()
     }
   } catch (error: any) {
     errorMessage.value = error.message || '操作失败，请重试'
   } finally {
     loading.value = false
+  }
+}
+
+// 处理登录
+const handleLogin = async () => {
+  // 1. 先尝试新方式登录（Supabase Auth）
+  const newAuthResult = await loginMemberWithAuth(formData.phone, formData.password)
+
+  if (newAuthResult.success) {
+    // 新方式登录成功
+    localStorage.setItem('userType', 'member')
+    localStorage.setItem('userId', newAuthResult.data.id)
+    localStorage.setItem('userName', newAuthResult.data.name)
+    localStorage.setItem('userGender', newAuthResult.data.gender)
+
+    successMessage.value = '登录成功！'
+    setTimeout(() => {
+      router.push('/member/home')
+    }, 1000)
+    return
+  }
+
+  // 2. 新方式失败，检查是否是老用户（user_id 为空）
+  const { data: oldMember } = await supabase
+    .from('members')
+    .select('user_id')
+    .eq('phone', formData.phone)
+    .single()
+
+  // 只有老用户（user_id 为空）才允许回退到旧方式
+  if (oldMember && !oldMember.user_id) {
+    const oldAuthResult = await loginMember(formData.phone, formData.password)
+
+    if (oldAuthResult.success) {
+      // 旧方式登录成功
+      localStorage.setItem('userType', 'member')
+      localStorage.setItem('userId', oldAuthResult.data.id)
+      localStorage.setItem('userName', oldAuthResult.data.name)
+      localStorage.setItem('userGender', oldAuthResult.data.gender)
+
+      successMessage.value = '登录成功！'
+      setTimeout(() => {
+        router.push('/member/home')
+      }, 1000)
+      return
+    }
+  }
+
+  // 两种方式都失败
+  errorMessage.value = newAuthResult.error || '登录失败'
+}
+
+// 处理注册
+const handleRegister = async () => {
+  const result = await registerMemberWithAuth(
+    formData.name,
+    formData.phone,
+    formData.password,
+    formData.gender,
+    formData.initial_weight,
+    formData.invite_code
+  )
+
+  if (result.success) {
+    if (result.warning) {
+      successMessage.value = result.warning
+    } else {
+      successMessage.value = '注册成功！'
+    }
+
+    // 3秒后切换到登录模式
+    setTimeout(() => {
+      toggleMode()
+    }, 3000)
+  } else {
+    errorMessage.value = result.error || '注册失败'
   }
 }
 </script>

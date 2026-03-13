@@ -43,6 +43,9 @@ lerna-debug.log*
 # 上传文件
 .codepilot-uploads/
 
+# 工作文档（包含敏感信息，不提交到GitHub）
+工作必看/
+
 # 测试脚本（包含敏感信息）
 *.test.js
 *-test.js

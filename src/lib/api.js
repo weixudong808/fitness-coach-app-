@@ -2,85 +2,56 @@ import { supabase } from './supabase.js'
 
 // ==================== 教练相关 API ====================
 
-/**
- * 教练注册
- * @param {Object} coachData - 教练信息
- * @param {string} coachData.name - 教练姓名
- * @param {string} coachData.phone - 手机号
- * @param {string} coachData.password - 密码
- * @returns {Promise<{success: boolean, data?: any, error?: string}>}
- */
-export async function registerCoach(coachData) {
-  try {
-    const { name, phone, password } = coachData
-
-    // 检查手机号是否已注册
-    const { data: existingCoach } = await supabase
-      .from('coaches')
-      .select('id')
-      .eq('phone', phone)
-      .single()
-
-    if (existingCoach) {
-      return { success: false, error: '该手机号已注册' }
-    }
-
-    // 插入教练数据（状态为待审核）
-    const { data, error } = await supabase
-      .from('coaches')
-      .insert([
-        {
-          name,
-          phone,
-          password, // 注意：实际项目中应该加密密码
-          audit_status: 'pending'
-        }
-      ])
-      .select()
-      .single()
-
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
-    return { success: true, data }
-  } catch (error) {
-    return { success: false, error: error.message }
-  }
-}
+// 注意：registerCoach 和 loginCoach 已废弃，请使用 registerCoachWithAuth 和 loginCoachWithAuth
 
 /**
- * 教练登录
+ * 教练登录（旧方式 - 仅供老用户使用）
+ * 注意：此函数仅用于 user_id 为空的老用户，新用户请使用 loginCoachWithAuth
  * @param {string} phone - 手机号
  * @param {string} password - 密码
  * @returns {Promise<{success: boolean, data?: any, error?: string}>}
  */
 export async function loginCoach(phone, password) {
   try {
-    const { data, error } = await supabase
+    // 1. 查询教练信息（只查询老用户：user_id 为空）
+    const { data: coach, error: queryError } = await supabase
       .from('coaches')
       .select('*')
       .eq('phone', phone)
-      .eq('password', password)
+      .is('user_id', null)  // 只允许老用户（user_id 为空）
       .single()
 
-    if (error || !data) {
+    if (queryError) {
+      // 如果是 PGRST116 错误（找不到记录），返回友好错误
+      if (queryError.code === 'PGRST116') {
+        return { success: false, error: '手机号或密码错误' }
+      }
+      // 其他错误（如多条记录）也返回通用错误
+      return { success: false, error: '登录失败，请联系管理员' }
+    }
+
+    if (!coach) {
       return { success: false, error: '手机号或密码错误' }
     }
 
-    // 检查审核状态
-    if (data.audit_status === 'pending') {
+    // 2. 验证密码（明文比对 - 仅用于老用户）
+    if (coach.password !== password) {
+      return { success: false, error: '手机号或密码错误' }
+    }
+
+    // 3. 检查审核状态
+    if (coach.audit_status === 'pending') {
       return { success: false, error: '账号审核中，请等待管理员审核' }
     }
 
-    if (data.audit_status === 'rejected') {
+    if (coach.audit_status === 'rejected') {
       return {
         success: false,
-        error: `账号审核未通过，原因：${data.reject_reason || '未说明'}`
+        error: `账号审核未通过，原因：${coach.reject_reason || '未说明'}`
       }
     }
 
-    return { success: true, data }
+    return { success: true, data: coach }
   } catch (error) {
     return { success: false, error: error.message }
   }
@@ -108,137 +79,48 @@ export async function getPendingCoaches() {
   }
 }
 
-/**
- * 审核教练（管理员用）
- * @param {string} coachId - 教练ID
- * @param {string} status - 审核状态：'approved' 或 'rejected'
- * @param {string} rejectReason - 拒绝原因（如果是拒绝的话）
- * @returns {Promise<{success: boolean, data?: any, error?: string}>}
- */
-export async function auditCoach(coachId, status, rejectReason = '') {
-  try {
-    const updateData = {
-      audit_status: status
-    }
-
-    if (status === 'rejected' && rejectReason) {
-      updateData.reject_reason = rejectReason
-    }
-
-    const { data, error } = await supabase
-      .from('coaches')
-      .update(updateData)
-      .eq('id', coachId)
-      .select()
-      .single()
-
-    if (error) {
-      return { success: false, error: error.message }
-    }
-
-    // TODO: 发送通知给教练
-    await createNotification({
-      user_type: 'coach',
-      user_id: coachId,
-      type: status === 'approved' ? 'coach_audit_approved' : 'coach_audit_rejected',
-      content: status === 'approved'
-        ? '恭喜！您的教练账号已审核通过，现在可以登录使用了。'
-        : `很抱歉，您的教练账号审核未通过。原因：${rejectReason}`
-    })
-
-    return { success: true, data }
-  } catch (error) {
-    return { success: false, error: error.message }
-  }
-}
+// 注意：auditCoach 已废弃，请使用 edge-functions.js 中的 adminAuditCoach
 
 // ==================== 会员相关 API ====================
 
-/**
- * 会员注册
- * @param {Object} memberData - 会员信息
- * @param {string} memberData.name - 会员姓名
- * @param {string} memberData.phone - 手机号
- * @param {string} memberData.password - 密码
- * @param {string} memberData.gender - 性别：'male' 或 'female'
- * @param {number} memberData.initial_weight - 初始体重（kg）
- * @param {string} memberData.invite_code - 邀请码（可选）
- * @returns {Promise<{success: boolean, data?: any, error?: string}>}
- */
-export async function registerMember(memberData) {
-  try {
-    const { name, phone, password, gender, initial_weight, invite_code } = memberData
-
-    // 检查手机号是否已注册
-    const { data: existingMember } = await supabase
-      .from('members')
-      .select('id')
-      .eq('phone', phone)
-      .single()
-
-    if (existingMember) {
-      return { success: false, error: '该手机号已注册' }
-    }
-
-    // 插入会员数据
-    const { data: member, error: memberError } = await supabase
-      .from('members')
-      .insert([
-        {
-          name,
-          phone,
-          password, // 注意：实际项目中应该加密密码
-          gender,
-          initial_weight,
-          current_weight: initial_weight // 初始时，当前体重等于初始体重
-        }
-      ])
-      .select()
-      .single()
-
-    if (memberError) {
-      return { success: false, error: memberError.message }
-    }
-
-    // 如果有邀请码，自动建立会员-教练关系
-    if (invite_code) {
-      const relationResult = await useInviteCode(member.id, invite_code)
-      if (!relationResult.success) {
-        // 邀请码无效，但会员已注册成功
-        return {
-          success: true,
-          data: member,
-          warning: `会员注册成功，但邀请码无效：${relationResult.error}`
-        }
-      }
-    }
-
-    return { success: true, data: member }
-  } catch (error) {
-    return { success: false, error: error.message }
-  }
-}
+// 注意：registerMember 和 loginMember 已废弃，请使用 registerMemberWithAuth 和 loginMemberWithAuth
 
 /**
- * 会员登录
+ * 会员登录（旧方式 - 仅供老用户使用）
+ * 注意：此函数仅用于 user_id 为空的老用户，新用户请使用 loginMemberWithAuth
  * @param {string} phone - 手机号
  * @param {string} password - 密码
  * @returns {Promise<{success: boolean, data?: any, error?: string}>}
  */
 export async function loginMember(phone, password) {
   try {
-    const { data, error } = await supabase
+    // 1. 查询会员信息（只查询老用户：user_id 为空）
+    const { data: member, error: queryError } = await supabase
       .from('members')
       .select('*')
       .eq('phone', phone)
-      .eq('password', password)
+      .is('user_id', null)  // 只允许老用户（user_id 为空）
       .single()
 
-    if (error || !data) {
+    if (queryError) {
+      // 如果是 PGRST116 错误（找不到记录），返回友好错误
+      if (queryError.code === 'PGRST116') {
+        return { success: false, error: '手机号或密码错误' }
+      }
+      // 其他错误（如多条记录）也返回通用错误
+      return { success: false, error: '登录失败，请联系管理员' }
+    }
+
+    if (!member) {
       return { success: false, error: '手机号或密码错误' }
     }
 
-    return { success: true, data }
+    // 2. 验证密码（明文比对 - 仅用于老用户）
+    if (member.password !== password) {
+      return { success: false, error: '手机号或密码错误' }
+    }
+
+    return { success: true, data: member }
   } catch (error) {
     return { success: false, error: error.message }
   }
@@ -761,6 +643,293 @@ export async function coachAddMember(coachId, memberId) {
     })
 
     return { success: true, data }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
+// ==================== 新认证方式（使用 Supabase Auth）====================
+
+/**
+ * 教练注册（使用 Supabase Auth）
+ * @param {string} name - 教练姓名
+ * @param {string} phone - 手机号
+ * @param {string} password - 密码
+ * @returns {Promise<{success: boolean, data?: any, error?: string}>}
+ */
+export async function registerCoachWithAuth(name, phone, password) {
+  try {
+    // 1. 统一手机号格式为 +86xxxxxxxxxxx
+    let formattedPhone = phone
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = `+86${formattedPhone.replace(/^0+/, '')}`
+    }
+
+    // 2. 检查手机号是否已在 coaches 表注册
+    const { data: existingCoach } = await supabase
+      .from('coaches')
+      .select('id')
+      .eq('phone', phone)
+      .single()
+
+    if (existingCoach) {
+      return { success: false, error: '该手机号已注册' }
+    }
+
+    // 3. 使用 Supabase Auth 创建用户
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      phone: formattedPhone,
+      password: password,
+      options: {
+        data: {
+          name: name,
+          user_type: 'coach'
+        }
+      }
+    })
+
+    if (authError) {
+      return { success: false, error: authError.message }
+    }
+
+    if (!authData.user) {
+      return { success: false, error: '创建认证用户失败' }
+    }
+
+    // 4. 在 coaches 表插入记录（不存储 password）
+    const { data: coach, error: coachError } = await supabase
+      .from('coaches')
+      .insert([
+        {
+          user_id: authData.user.id,
+          name: name,
+          phone: phone,
+          audit_status: 'pending'
+        }
+      ])
+      .select()
+      .single()
+
+    if (coachError) {
+      // 注册失败：Auth 用户已创建但业务表插入失败
+      // 退出登录状态，避免用户处于"半登录"状态
+      try {
+        await supabase.auth.signOut()
+      } catch (signOutError) {
+        // signOut 失败不影响主错误返回
+        console.error('退出登录失败:', signOutError)
+      }
+
+      // 注意：此时会产生"半注册用户"（Auth里有，业务表里没有）
+      // 需要通过服务端定时清理任务处理（见 docs/半注册用户清理规则.md）
+      return { success: false, error: `创建教练记录失败: ${coachError.message}` }
+    }
+
+    return { success: true, data: coach }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 教练登录（使用 Supabase Auth）
+ * @param {string} phone - 手机号
+ * @param {string} password - 密码
+ * @returns {Promise<{success: boolean, data?: any, error?: string}>}
+ */
+export async function loginCoachWithAuth(phone, password) {
+  try {
+    // 1. 统一手机号格式为 +86xxxxxxxxxxx
+    let formattedPhone = phone
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = `+86${formattedPhone.replace(/^0+/, '')}`
+    }
+
+    // 2. 使用 Supabase Auth 登录
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      phone: formattedPhone,
+      password: password
+    })
+
+    if (authError) {
+      return { success: false, error: '手机号或密码错误' }
+    }
+
+    if (!authData.user) {
+      return { success: false, error: '登录失败' }
+    }
+
+    // 3. 查询教练信息
+    const { data: coach, error: coachError } = await supabase
+      .from('coaches')
+      .select('*')
+      .eq('user_id', authData.user.id)
+      .single()
+
+    if (coachError || !coach) {
+      return { success: false, error: '教练信息不存在' }
+    }
+
+    // 4. 检查审核状态
+    if (coach.audit_status === 'pending') {
+      // 登录失败，退出登录
+      await supabase.auth.signOut()
+      return { success: false, error: '账号审核中，请等待管理员审核' }
+    }
+
+    if (coach.audit_status === 'rejected') {
+      // 登录失败，退出登录
+      await supabase.auth.signOut()
+      return {
+        success: false,
+        error: `账号审核未通过，原因：${coach.reject_reason || '未说明'}`
+      }
+    }
+
+    return { success: true, data: coach }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 会员注册（使用 Supabase Auth）
+ * @param {string} name - 会员姓名
+ * @param {string} phone - 手机号
+ * @param {string} password - 密码
+ * @param {string} gender - 性别
+ * @param {number} initial_weight - 初始体重
+ * @param {string} invite_code - 邀请码（可选）
+ * @returns {Promise<{success: boolean, data?: any, error?: string}>}
+ */
+export async function registerMemberWithAuth(name, phone, password, gender, initial_weight, invite_code) {
+  try {
+    // 1. 统一手机号格式为 +86xxxxxxxxxxx
+    let formattedPhone = phone
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = `+86${formattedPhone.replace(/^0+/, '')}`
+    }
+
+    // 2. 检查手机号是否已在 members 表注册
+    const { data: existingMember } = await supabase
+      .from('members')
+      .select('id')
+      .eq('phone', phone)
+      .single()
+
+    if (existingMember) {
+      return { success: false, error: '该手机号已注册' }
+    }
+
+    // 3. 使用 Supabase Auth 创建用户
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      phone: formattedPhone,
+      password: password,
+      options: {
+        data: {
+          name: name,
+          user_type: 'member'
+        }
+      }
+    })
+
+    if (authError) {
+      return { success: false, error: authError.message }
+    }
+
+    if (!authData.user) {
+      return { success: false, error: '创建认证用户失败' }
+    }
+
+    // 4. 在 members 表插入记录（不存储 password）
+    const { data: member, error: memberError } = await supabase
+      .from('members')
+      .insert([
+        {
+          user_id: authData.user.id,
+          name: name,
+          phone: phone,
+          gender: gender,
+          initial_weight: initial_weight,
+          current_weight: initial_weight
+        }
+      ])
+      .select()
+      .single()
+
+    if (memberError) {
+      // 注册失败：Auth 用户已创建但业务表插入失败
+      // 退出登录状态，避免用户处于"半登录"状态
+      try {
+        await supabase.auth.signOut()
+      } catch (signOutError) {
+        // signOut 失败不影响主错误返回
+        console.error('退出登录失败:', signOutError)
+      }
+
+      // 注意：此时会产生"半注册用户"（Auth里有，业务表里没有）
+      // 需要通过服务端定时清理任务处理（见 docs/半注册用户清理规则.md）
+      return { success: false, error: `创建会员记录失败: ${memberError.message}` }
+    }
+
+    // 5. 如果有邀请码，自动建立会员-教练关系
+    if (invite_code) {
+      const relationResult = await useInviteCode(member.id, invite_code)
+      if (!relationResult.success) {
+        return {
+          success: true,
+          data: member,
+          warning: `会员注册成功，但邀请码无效：${relationResult.error}`
+        }
+      }
+    }
+
+    return { success: true, data: member }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 会员登录（使用 Supabase Auth）
+ * @param {string} phone - 手机号
+ * @param {string} password - 密码
+ * @returns {Promise<{success: boolean, data?: any, error?: string}>}
+ */
+export async function loginMemberWithAuth(phone, password) {
+  try {
+    // 1. 统一手机号格式为 +86xxxxxxxxxxx
+    let formattedPhone = phone
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = `+86${formattedPhone.replace(/^0+/, '')}`
+    }
+
+    // 2. 使用 Supabase Auth 登录
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      phone: formattedPhone,
+      password: password
+    })
+
+    if (authError) {
+      return { success: false, error: '手机号或密码错误' }
+    }
+
+    if (!authData.user) {
+      return { success: false, error: '登录失败' }
+    }
+
+    // 3. 查询会员信息
+    const { data: member, error: memberError } = await supabase
+      .from('members')
+      .select('*')
+      .eq('user_id', authData.user.id)
+      .single()
+
+    if (memberError || !member) {
+      return { success: false, error: '会员信息不存在' }
+    }
+
+    return { success: true, data: member }
   } catch (error) {
     return { success: false, error: error.message }
   }

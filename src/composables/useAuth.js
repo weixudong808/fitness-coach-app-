@@ -5,16 +5,81 @@ const user = ref(null)
 const loading = ref(false)
 
 export function useAuth() {
-  // 获取当前用户
+  // 获取当前用户（兼容新旧方式）
   const getCurrentUser = async () => {
     loading.value = true
     try {
+      // 1. 优先从 Supabase Auth 获取（新用户）
       const { data: { user: currentUser } } = await supabase.auth.getUser()
-      user.value = currentUser
-      return currentUser
+
+      if (currentUser) {
+        user.value = currentUser
+        return {
+          id: currentUser.id,
+          phone: currentUser.phone || currentUser.user_metadata?.phone,
+          name: currentUser.user_metadata?.name,
+          userType: currentUser.user_metadata?.user_type,
+          isNewAuth: true // 标记为新认证方式
+        }
+      }
+
+      // 2. 如果 Supabase Auth 没有用户，尝试从 localStorage 获取（老用户）
+      const userType = localStorage.getItem('userType')
+      const userId = localStorage.getItem('userId')
+      const userName = localStorage.getItem('userName')
+
+      if (userType && userId) {
+        return {
+          id: userId,
+          name: userName,
+          userType: userType,
+          isNewAuth: false // 标记为旧认证方式
+        }
+      }
+
+      return null
     } catch (error) {
       console.error('获取用户信息失败:', error)
       return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 检查是否已登录（兼容新旧方式）
+  const isAuthenticated = async () => {
+    // 1. 检查 Supabase Auth（新用户）
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    if (currentUser) {
+      return true
+    }
+
+    // 2. 检查 localStorage（老用户）
+    const userType = localStorage.getItem('userType')
+    const userId = localStorage.getItem('userId')
+
+    return !!(userType && userId)
+  }
+
+  // 退出登录（清理新旧两种登录态）
+  const logout = async () => {
+    loading.value = true
+    try {
+      // 1. 清理 Supabase Auth（新用户）
+      await supabase.auth.signOut()
+
+      // 2. 清理 localStorage（老用户）
+      localStorage.removeItem('userType')
+      localStorage.removeItem('userId')
+      localStorage.removeItem('userName')
+      localStorage.removeItem('userGender')
+      localStorage.removeItem('coachData')
+
+      user.value = null
+      return { success: true }
+    } catch (error) {
+      console.error('退出登录失败:', error)
+      return { success: false, error: error.message }
     } finally {
       loading.value = false
     }
@@ -135,16 +200,18 @@ export function useAuth() {
     }
   }
 
-  const isAuthenticated = computed(() => !!user.value)
+  const isAuthenticatedComputed = computed(() => !!user.value)
 
   return {
     user,
     loading,
-    isAuthenticated,
+    isAuthenticated, // 函数版本（兼容新旧方式）
+    isAuthenticatedComputed, // computed 版本（保持向后兼容）
     getCurrentUser,
     signIn,
     signUp,
-    signOut,
+    signOut: logout, // 使用新的 logout 函数
+    logout, // 也导出 logout 名称
     getUserRole
   }
 }
