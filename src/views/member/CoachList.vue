@@ -119,12 +119,14 @@ const inviteCode = ref('')
 const message = ref('')
 const messageType = ref('success')
 
-// 获取会员ID
+// 获取会员ID（兼容新旧数据）
 const getMemberId = () => {
+  const userId = localStorage.getItem('userId')
+  if (userId) return userId
+
   const memberData = localStorage.getItem('memberData')
-  if (memberData) {
-    return JSON.parse(memberData).id
-  }
+  if (memberData) return JSON.parse(memberData).id
+
   return null
 }
 
@@ -186,9 +188,13 @@ const handleApplyCoach = async (coachId) => {
       router.push('/member/auth')
       return
     }
-    await memberApplyCoach(memberId, coachId)
-    showMessage('申请已发送，等待教练审核', 'success')
-    await loadMyCoaches()
+    const result = await memberApplyCoach(memberId, coachId)
+    if (result.success) {
+      showMessage('申请已发送，等待教练审核', 'success')
+      await loadMyCoaches()
+    } else {
+      showMessage('申请失败：' + (result.error || '未知错误'), 'error')
+    }
   } catch (error) {
     showMessage('申请失败：' + error.message, 'error')
   }
@@ -208,10 +214,14 @@ const handleUseInviteCode = async () => {
       router.push('/member/auth')
       return
     }
-    await useInviteCode(inviteCode.value.trim(), memberId)
-    showMessage('使用邀请码成功！已建立教练关系', 'success')
-    inviteCode.value = ''
-    await loadMyCoaches()
+    const result = await useInviteCode(memberId, inviteCode.value.trim())
+    if (result.success) {
+      showMessage('使用邀请码成功！已建立教练关系', 'success')
+      inviteCode.value = ''
+      await loadMyCoaches()
+    } else {
+      showMessage('使用失败：' + (result.error || '未知错误'), 'error')
+    }
   } catch (error) {
     showMessage('使用失败：' + error.message, 'error')
   }
@@ -233,6 +243,10 @@ const showMessage = (msg, type = 'success') => {
 
 // 退出登录
 const handleLogout = () => {
+  localStorage.removeItem('userType')
+  localStorage.removeItem('userId')
+  localStorage.removeItem('userName')
+  localStorage.removeItem('userGender')
   localStorage.removeItem('memberData')
   router.push('/member/auth')
 }

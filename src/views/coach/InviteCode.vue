@@ -1,5 +1,12 @@
 <template>
   <div class="invite-code-page">
+    <!-- 导航栏 -->
+    <div class="nav-bar">
+      <button @click="$router.push('/coach/members')" class="back-btn">
+        ← 返回教练中心
+      </button>
+    </div>
+
     <div class="page-header">
       <h1>我的邀请码</h1>
       <p class="subtitle">分享邀请码给会员，会员注册时使用邀请码可自动建立关系</p>
@@ -141,6 +148,28 @@ onMounted(() => {
   max-width: 800px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.nav-bar {
+  margin-bottom: 20px;
+}
+
+.back-btn {
+  padding: 10px 20px;
+  background: white;
+  color: #667eea;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.back-btn:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-2px);
 }
 
 .page-header {
