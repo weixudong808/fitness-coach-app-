@@ -1,6 +1,8 @@
 // Edge Functions 调用辅助函数
 // 用于调用 Supabase Edge Functions
 
+import { supabase } from './supabase'
+
 // 获取 Supabase 项目 URL
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
@@ -13,16 +15,17 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
  */
 export async function adminAuditCoach(coachId, status, rejectReason = '') {
   try {
-    const adminToken = localStorage.getItem('adminToken')
+    // 获取当前用户的 session token
+    const { data: { session } } = await supabase.auth.getSession()
 
-    if (!adminToken) {
+    if (!session) {
       return { success: false, error: '未登录或无管理员权限' }
     }
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-audit-coach`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${adminToken}`,
+        'Authorization': `Bearer ${session.access_token}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ coachId, status, rejectReason })

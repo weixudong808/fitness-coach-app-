@@ -28,25 +28,41 @@ serve(async (req) => {
       }
     )
 
-    // 验证管理员身份（必须配置 ADMIN_TOKEN）
+    // 验证管理员身份（校验 JWT + admin 角色）
     const authHeader = req.headers.get('Authorization')
-    const adminToken = Deno.env.get('ADMIN_TOKEN')
 
-    if (!adminToken) {
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({ success: false, error: '服务未配置管理员令牌' }),
+        JSON.stringify({ success: false, error: '未提供认证令牌' }),
         {
-          status: 500,
+          status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       )
     }
 
-    if (!authHeader || authHeader !== `Bearer ${adminToken}`) {
+    // 使用 supabaseAdmin 验证 JWT
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+
+    if (authError || !user) {
       return new Response(
-        JSON.stringify({ success: false, error: '无权限访问' }),
+        JSON.stringify({ success: false, error: '认证失败' }),
         {
           status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    // 检查用户是否有 admin 角色
+    const userRole = user.user_metadata?.role || user.app_metadata?.role
+
+    if (userRole !== 'admin') {
+      return new Response(
+        JSON.stringify({ success: false, error: '无管理员权限' }),
+        {
+          status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       )

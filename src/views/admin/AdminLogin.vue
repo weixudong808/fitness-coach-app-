@@ -46,6 +46,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { supabase } from '@/lib/supabase'
 
 const router = useRouter()
 const username = ref('')
@@ -55,21 +56,39 @@ const loading = ref(false)
 const error = ref('')
 
 const handleLogin = async () => {
-  // 简单的管理员验证（实际项目中应该调用后端API）
-  if (username.value === 'admin' && password.value === 'admin123') {
-    loading.value = true
-    error.value = ''
+  loading.value = true
+  error.value = ''
 
-    setTimeout(() => {
-      // 使用固定的管理员 token（与 Edge Function 的 ADMIN_TOKEN 一致）
-      // 注意：这个 token 应该从环境变量读取，这里暂时硬编码
-      // 生产环境必须配置 ADMIN_TOKEN 环境变量
-      const adminToken = import.meta.env.VITE_ADMIN_TOKEN || 'PLEASE_SET_ADMIN_TOKEN'
-      localStorage.setItem('adminToken', adminToken)
-      router.push('/admin/audit')
-    }, 500)
-  } else {
-    error.value = '账号或密码错误'
+  try {
+    // 使用 Supabase Auth 登录（管理员用邮箱登录）
+    const email = username.value.includes('@') ? username.value : `${username.value}@fitness.app`
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password.value
+    })
+
+    if (authError) {
+      error.value = '账号或密码错误'
+      loading.value = false
+      return
+    }
+
+    // 检查用户是否有 admin 角色
+    const userRole = data.user?.user_metadata?.role || data.user?.app_metadata?.role
+
+    if (userRole !== 'admin') {
+      error.value = '无管理员权限'
+      await supabase.auth.signOut()
+      loading.value = false
+      return
+    }
+
+    // 登录成功，跳转到管理员审核页面
+    router.push('/admin/audit')
+  } catch (err) {
+    error.value = '登录失败，请重试'
+    loading.value = false
   }
 }
 </script>
