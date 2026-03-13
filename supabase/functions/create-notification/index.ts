@@ -28,12 +28,47 @@ serve(async (req) => {
       }
     )
 
+    // 验证内部调用（必须有 INTERNAL_SECRET）
+    const authHeader = req.headers.get('Authorization')
+    const internalSecret = Deno.env.get('INTERNAL_SECRET')
+
+    if (!internalSecret) {
+      return new Response(
+        JSON.stringify({ success: false, error: '服务未配置' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    if (!authHeader || authHeader !== `Bearer ${internalSecret}`) {
+      return new Response(
+        JSON.stringify({ success: false, error: '无权限访问' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
     // 解析请求体
     const { user_type, user_id, type, content, related_id } = await req.json()
 
     if (!user_type || !user_id || !type || !content) {
       return new Response(
         JSON.stringify({ success: false, error: '缺少必要参数' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    // 校验 user_type 合法性
+    if (!['coach', 'member', 'admin'].includes(user_type)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'user_type 不合法' }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

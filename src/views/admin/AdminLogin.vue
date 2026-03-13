@@ -61,7 +61,11 @@ const handleLogin = async () => {
     error.value = ''
 
     setTimeout(() => {
-      localStorage.setItem('adminToken', 'admin-token-' + Date.now())
+      // 使用固定的管理员 token（与 Edge Function 的 ADMIN_TOKEN 一致）
+      // 注意：这个 token 应该从环境变量读取，这里暂时硬编码
+      // 生产环境必须配置 ADMIN_TOKEN 环境变量
+      const adminToken = import.meta.env.VITE_ADMIN_TOKEN || 'PLEASE_SET_ADMIN_TOKEN'
+      localStorage.setItem('adminToken', adminToken)
       router.push('/admin/audit')
     }, 500)
   } else {

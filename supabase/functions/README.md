@@ -95,12 +95,30 @@ supabase functions deploy delete-auth-user
 ```
 
 ### 设置环境变量
+
+**必须设置的环境变量：**
+
 ```bash
-# 设置管理员 Token（用于 admin-audit-coach）
-supabase secrets set ADMIN_TOKEN=your-admin-secret-token
+# 1. 管理员令牌（用于 admin-audit-coach）
+# 必须设置强密码，不要使用默认值
+supabase secrets set ADMIN_TOKEN=your-strong-admin-password
+
+# 2. 内部密钥（用于 create-notification 和 delete-auth-user）
+# 用于服务端内部调用，不要暴露给前端
+supabase secrets set INTERNAL_SECRET=your-strong-internal-secret
 ```
 
-**说明：** `SUPABASE_URL` 和 `SUPABASE_SERVICE_ROLE_KEY` 会自动注入，不需要手动设置。
+**前端环境变量（.env 文件）：**
+
+```bash
+# .env.local 或 .env.production
+VITE_ADMIN_TOKEN=your-strong-admin-password
+```
+
+**说明：**
+- `SUPABASE_URL` 和 `SUPABASE_SERVICE_ROLE_KEY` 会自动注入，不需要手动设置
+- `ADMIN_TOKEN` 必须与前端的 `VITE_ADMIN_TOKEN` 一致
+- `INTERNAL_SECRET` 只在服务端使用，不要暴露给前端
 
 ---
 
@@ -213,22 +231,38 @@ export async function deleteAuthUser(userId) {
 
 ## ⚠️ 注意事项
 
-### 1. 安全性
-- `ADMIN_TOKEN` 要设置为强密码
-- 不要在前端代码中硬编码 `ADMIN_TOKEN`
-- `service_role` key 只在服务端使用，不要暴露给前端
+### 1. 安全性（重要！）
+- **ADMIN_TOKEN 必须设置强密码**
+  - 不要使用默认值或简单密码
+  - 建议使用随机生成的长密码（至少32位）
+  - 如果未设置，函数会拒绝请求（返回500错误）
+
+- **INTERNAL_SECRET 必须设置**
+  - 用于服务端内部调用（create-notification、delete-auth-user）
+  - 不要暴露给前端
+  - 不要在前端代码中硬编码
+
+- **service_role key 只在服务端使用**
+  - 不要暴露给前端
+  - 不要在前端代码中使用
+
+- **前端只能调用 admin-audit-coach**
+  - `create-notification` 和 `delete-auth-user` 只能在服务端调用
+  - 前端不应该有这两个函数的调用权限
 
 ### 2. CORS
 - 所有函数已配置 CORS，允许跨域请求
-- 生产环境建议限制 `Access-Control-Allow-Origin`
+- 生产环境建议限制 `Access-Control-Allow-Origin` 到你的域名
 
 ### 3. 错误处理
 - 所有函数都返回统一格式：`{ success: boolean, data?: any, error?: string }`
 - 前端调用时要检查 `success` 字段
+- 401 错误表示无权限，500 错误表示服务未配置
 
 ### 4. 环境变量
 - 本地测试：在 `supabase/.env.local` 设置
 - 生产环境：用 `supabase secrets set` 设置
+- 前端环境变量：在 `.env.local` 或 `.env.production` 设置
 
 ---
 

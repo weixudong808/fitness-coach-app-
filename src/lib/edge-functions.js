@@ -13,7 +13,11 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
  */
 export async function adminAuditCoach(coachId, status, rejectReason = '') {
   try {
-    const adminToken = localStorage.getItem('adminToken') || 'admin-secret-token'
+    const adminToken = localStorage.getItem('adminToken')
+
+    if (!adminToken) {
+      return { success: false, error: '未登录或无管理员权限' }
+    }
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-audit-coach`, {
       method: 'POST',
@@ -32,20 +36,27 @@ export async function adminAuditCoach(coachId, status, rejectReason = '') {
 }
 
 /**
- * 创建通知
+ * 创建通知（内部使用，需要 INTERNAL_SECRET）
+ * 注意：此函数只能在服务端调用，不应该在前端直接使用
  * @param {Object} notificationData - 通知信息
  * @param {string} notificationData.user_type - 用户类型：'coach' 或 'member'
  * @param {string} notificationData.user_id - 用户ID
  * @param {string} notificationData.type - 通知类型
  * @param {string} notificationData.content - 通知内容
  * @param {string} notificationData.related_id - 关联ID（可选）
+ * @param {string} internalSecret - 内部密钥（必须）
  * @returns {Promise<{success: boolean, data?: any, error?: string}>}
  */
-export async function createNotification(notificationData) {
+export async function createNotificationInternal(notificationData, internalSecret) {
   try {
+    if (!internalSecret) {
+      return { success: false, error: '缺少内部密钥' }
+    }
+
     const response = await fetch(`${SUPABASE_URL}/functions/v1/create-notification`, {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${internalSecret}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(notificationData)
@@ -60,14 +71,21 @@ export async function createNotification(notificationData) {
 
 /**
  * 删除认证用户（内部使用，用于注册失败回滚）
+ * 注意：此函数只能在服务端调用，不应该在前端直接使用
  * @param {string} userId - 认证用户ID
+ * @param {string} internalSecret - 内部密钥（必须）
  * @returns {Promise<{success: boolean, data?: any, error?: string}>}
  */
-export async function deleteAuthUser(userId) {
+export async function deleteAuthUserInternal(userId, internalSecret) {
   try {
+    if (!internalSecret) {
+      return { success: false, error: '缺少内部密钥' }
+    }
+
     const response = await fetch(`${SUPABASE_URL}/functions/v1/delete-auth-user`, {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${internalSecret}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ userId })

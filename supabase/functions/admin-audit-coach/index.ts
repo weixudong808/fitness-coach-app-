@@ -28,9 +28,19 @@ serve(async (req) => {
       }
     )
 
-    // 验证管理员身份（简单验证 adminToken）
+    // 验证管理员身份（必须配置 ADMIN_TOKEN）
     const authHeader = req.headers.get('Authorization')
-    const adminToken = Deno.env.get('ADMIN_TOKEN') ?? 'admin-secret-token'
+    const adminToken = Deno.env.get('ADMIN_TOKEN')
+
+    if (!adminToken) {
+      return new Response(
+        JSON.stringify({ success: false, error: '服务未配置管理员令牌' }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
 
     if (!authHeader || authHeader !== `Bearer ${adminToken}`) {
       return new Response(
