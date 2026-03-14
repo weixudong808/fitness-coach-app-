@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
+import { useAuth } from './useAuth'
 
 const loading = ref(false)
 const achievements = ref([])
@@ -7,25 +8,13 @@ const memberLevel = ref(null)
 const progressData = ref([])
 
 export function useAchievements() {
+  const { resolveCurrentMemberId } = useAuth()
+
   /**
-   * 获取会员ID（从当前登录用户）
+   * 获取会员ID（兼容新老用户）
    */
   const getCurrentMemberId = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('未登录')
-
-      const { data: member } = await supabase
-        .from('members')
-        .select('id')
-        .eq('user_id', user.id)
-        .single()
-
-      return member?.id
-    } catch (error) {
-      console.error('获取会员ID失败:', error)
-      return null
-    }
+    return await resolveCurrentMemberId()
   }
 
   /**

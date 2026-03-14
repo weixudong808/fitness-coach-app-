@@ -76,7 +76,7 @@ import { useAuth } from '../../composables/useAuth'
 import { supabase } from '../../lib/supabase'
 
 const router = useRouter()
-const { signOut, user, getCurrentUser } = useAuth()
+const { signOut, resolveCurrentMemberId } = useAuth()
 
 const loading = ref(false)
 const plans = ref([])
@@ -107,28 +107,19 @@ const completedPlans = computed(() => {
 const loadPlans = async () => {
   loading.value = true
   try {
-    // 获取当前用户
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
+    // 统一获取会员ID（兼容新老用户）
+    const memberId = await resolveCurrentMemberId()
+    if (!memberId) {
       ElMessage.error('请先登录')
-      router.push('/login')
+      router.push('/member/auth')
       return
     }
-
-    // 通过 user_id 查找 member_id
-    const { data: memberData, error: memberError } = await supabase
-      .from('members')
-      .select('id')
-      .eq('user_id', currentUser.id)
-      .single()
-
-    if (memberError) throw memberError
 
     // 查询该会员的训练计划
     const { data: plansData, error: plansError } = await supabase
       .from('member_plans')
       .select('*')
-      .eq('member_id', memberData.id)
+      .eq('member_id', memberId)
       .order('created_at', { ascending: false })
 
     if (plansError) throw plansError

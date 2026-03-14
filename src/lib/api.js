@@ -51,6 +51,9 @@ export async function loginCoach(phone, password) {
       }
     }
 
+    // 4. 清除 Supabase Auth session（防止管理员/其他角色的登录状态干扰）
+    await supabase.auth.signOut()
+
     return { success: true, data: coach }
   } catch (error) {
     return { success: false, error: error.message }
@@ -119,6 +122,9 @@ export async function loginMember(phone, password) {
     if (member.password !== password) {
       return { success: false, error: '手机号或密码错误' }
     }
+
+    // 3. 清除 Supabase Auth session（防止管理员/其他角色的登录状态干扰）
+    await supabase.auth.signOut()
 
     return { success: true, data: member }
   } catch (error) {

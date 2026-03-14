@@ -16,6 +16,41 @@ import { supabase } from './supabase'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 
 /**
+ * 管理员解除教练合作
+ * @param {string} coachId - 教练ID
+ * @param {string} reason - 解约原因（必填）
+ * @returns {Promise<{success: boolean, data?: any, error?: string}>}
+ */
+export async function adminTerminateCoach(coachId, reason) {
+  try {
+    // 获取当前用户的 session token
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      return { success: false, error: '未登录或无管理员权限' }
+    }
+
+    if (!reason || !reason.trim()) {
+      return { success: false, error: '解约原因不能为空' }
+    }
+
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-terminate-coach`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ coachId, reason: reason.trim() })
+    })
+
+    const result = await response.json()
+    return result
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
+/**
  * 管理员审核教练
  * @param {string} coachId - 教练ID
  * @param {string} status - 审核状态：'approved' 或 'rejected'

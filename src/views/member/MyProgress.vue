@@ -116,6 +116,7 @@ use([
 
 const router = useRouter()
 const { signOut } = useAuth()
+const { resolveCurrentMemberId } = useAuth()
 const loading = ref(true)
 const memberId = ref(null)
 const activeMenu = ref('progress')
@@ -161,30 +162,13 @@ const customDateRange = ref([
   new Date()
 ])
 
-// 获取当前登录会员ID
+// 获取当前登录会员ID（兼容新老用户）
 const getCurrentMemberId = async () => {
-  try {
-    // 1. 获取当前用户
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      ElMessage.error('请先登录')
-      return null
-    }
-
-    // 2. 通过 user_id 查找会员记录
-    const { data: memberData, error } = await supabase
-      .from('members')
-      .select('id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (error) throw error
-    return memberData.id
-  } catch (error) {
-    console.error('获取会员信息失败:', error)
-    ElMessage.error('获取会员信息失败')
-    return null
+  const id = await resolveCurrentMemberId()
+  if (!id) {
+    ElMessage.error('获取会员信息失败，请重新登录')
   }
+  return id
 }
 
 // 计算日期范围

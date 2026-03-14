@@ -102,6 +102,12 @@ const router = createRouter({
       component: () => import('../views/admin/CoachAudit.vue'),
       meta: { requiresAuth: true, role: 'admin' }
     },
+    {
+      path: '/admin/coaches',
+      name: 'admin-coaches',
+      component: () => import('../views/admin/AdminCoaches.vue'),
+      meta: { requiresAuth: true, role: 'admin' }
+    },
     // 会员端路由
     {
       path: '/member',
@@ -182,13 +188,16 @@ router.beforeEach(async (to, from) => {
     const requiredRole = to.meta.role as string
 
     if (requiredRole && user && user.userType !== requiredRole) {
-      // 角色不匹配，跳转到对应角色的首页
+      // 角色不匹配，跳转到对应角色的首页（而不是放行！）
       if (user.userType === 'coach') {
-        return { name: 'coach-invite-code' }
+        return { name: 'coach-auth' }
       } else if (user.userType === 'member') {
-        return { name: 'member-home' }
+        return { name: 'member-auth' }
       } else if (user.userType === 'admin') {
-        return { name: 'admin-audit' }
+        return { name: 'admin-login' }
+      } else {
+        // 角色未知，一律拒绝并跳登录页（防止越权放行）
+        return { name: 'member-auth' }
       }
     }
   }

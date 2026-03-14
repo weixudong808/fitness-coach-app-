@@ -73,7 +73,7 @@
           </div>
 
           <div class="action-buttons">
-            <button @click="handleDeleteMember(member.id)" class="delete-btn">
+            <button @click="handleDeleteMember(member.relationId)" class="delete-btn">
               删除会员
             </button>
           </div>
@@ -96,7 +96,7 @@
           <div class="request-info">
             <div class="info-row">
               <span class="label">会员姓名：</span>
-              <span class="value">{{ request.member_name }}</span>
+              <span class="value">{{ request.members?.name || request.member_name || '未知' }}</span>
             </div>
             <div class="info-row">
               <span class="label">申请时间：</span>
@@ -182,12 +182,20 @@ const unclaimedMembers = ref([])
 const message = ref('')
 const messageType = ref('success')
 
-// 获取教练ID
+// 获取教练ID（兼容新老用户）
 const getCoachId = () => {
   const coachData = localStorage.getItem('coachData')
   if (coachData) {
-    return JSON.parse(coachData).id
+    try {
+      const parsed = JSON.parse(coachData)
+      if (parsed.id) return parsed.id
+    } catch (e) {
+      console.error('解析coachData失败:', e)
+    }
   }
+  // 兜底：老用户的 userId 直接就是 coaches.id
+  const userId = localStorage.getItem('userId')
+  if (userId) return userId
   return null
 }
 
@@ -203,8 +211,11 @@ const loadMembers = async () => {
     }
     const result = await getCoachMembers(coachId)
     if (result.success) {
-      // 提取会员信息
-      members.value = result.data.map(item => item.members)
+      // 提取会员信息，同时保留关系ID（用于删除会员时使用）
+      members.value = result.data.map(item => ({
+        ...item.members,
+        relationId: item.id  // 保留关系ID，删除时必须用这个
+      }))
     } else {
       showMessage('加载失败：' + result.error, 'error')
     }
@@ -288,13 +299,11 @@ const handleAddMember = async (memberId) => {
 }
 
 // 删除会员
-const handleDeleteMember = async (memberId) => {
+const handleDeleteMember = async (relationId) => {
   if (!confirm('确定要删除这个会员吗？')) return
 
   try {
-    const coachId = getCoachId()
-    if (!coachId) return
-    await coachDeleteMember(coachId, memberId)
+    await coachDeleteMember(relationId)  // 只传关系ID
     showMessage('已删除会员', 'success')
     await loadMembers()
   } catch (error) {

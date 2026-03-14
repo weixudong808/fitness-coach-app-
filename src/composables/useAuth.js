@@ -18,7 +18,8 @@ export function useAuth() {
           id: currentUser.id,
           phone: currentUser.phone || currentUser.user_metadata?.phone,
           name: currentUser.user_metadata?.name,
-          userType: currentUser.user_metadata?.user_type,
+          // 统一读取角色：优先 app_metadata.role，再 user_metadata.role，再 user_metadata.user_type
+          userType: currentUser.app_metadata?.role || currentUser.user_metadata?.role || currentUser.user_metadata?.user_type,
           isNewAuth: true // 标记为新认证方式
         }
       }
@@ -183,6 +184,30 @@ export function useAuth() {
     }
   }
 
+  // 统一获取会员ID（兼容新老用户）
+  // 新用户：通过 Supabase Auth → 查 members 表的 user_id 字段
+  // 老用户：直接从 localStorage 读取 userId（老系统存的就是 members.id）
+  const resolveCurrentMemberId = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (authUser) {
+        const { data: member, error } = await supabase
+          .from('members')
+          .select('id')
+          .eq('user_id', authUser.id)
+          .single()
+        if (error || !member) return null
+        return member.id // 返回 members.id（字符串）
+      }
+      // 老用户：localStorage 里的 userId 就是 members.id
+      const userId = localStorage.getItem('userId')
+      return userId || null
+    } catch (error) {
+      console.error('获取会员ID失败:', error)
+      return null
+    }
+  }
+
   // 检查用户角色
   const getUserRole = async (userId) => {
     try {
@@ -208,6 +233,7 @@ export function useAuth() {
     isAuthenticated, // 函数版本（兼容新旧方式）
     isAuthenticatedComputed, // computed 版本（保持向后兼容）
     getCurrentUser,
+    resolveCurrentMemberId, // 统一获取会员ID（新老用户兼容）
     signIn,
     signUp,
     signOut: logout, // 使用新的 logout 函数

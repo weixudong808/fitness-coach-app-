@@ -1,27 +1,27 @@
 <template>
-  <div class="coach-audit-container">
+  <div class="admin-coaches-container">
     <!-- 顶部导航 -->
     <div class="header-card">
       <h2>管理员中心</h2>
       <div class="nav-buttons">
-        <button class="nav-btn active">教练审核</button>
-        <button @click="$router.push('/admin/coaches')" class="nav-btn">在册教练</button>
+        <button @click="$router.push('/admin/audit')" class="nav-btn">教练审核</button>
+        <button class="nav-btn active">在册教练</button>
         <button @click="handleLogout" class="logout-btn">退出登录</button>
       </div>
     </div>
 
-    <!-- 待审核教练列表 -->
+    <!-- 在册教练列表 -->
     <div class="content-card">
-      <h3>待审核教练列表</h3>
+      <h3>在册教练列表</h3>
 
       <div v-if="loading" class="loading">加载中...</div>
 
-      <div v-else-if="pendingCoaches.length === 0" class="empty">
-        暂无待审核的教练
+      <div v-else-if="coaches.length === 0" class="empty">
+        暂无在册教练
       </div>
 
       <div v-else class="coach-list">
-        <div v-for="coach in pendingCoaches" :key="coach.id" class="coach-item">
+        <div v-for="coach in coaches" :key="coach.id" class="coach-item">
           <div class="coach-info">
             <div class="info-row">
               <span class="label">姓名：</span>
@@ -32,17 +32,14 @@
               <span class="value">{{ coach.phone }}</span>
             </div>
             <div class="info-row">
-              <span class="label">申请时间：</span>
-              <span class="value">{{ formatDate(coach.created_at) }}</span>
+              <span class="label">审核时间：</span>
+              <span class="value">{{ formatDate(coach.updated_at) }}</span>
             </div>
           </div>
 
           <div class="action-buttons">
-            <button @click="handleApprove(coach.id)" class="approve-btn">
-              通过
-            </button>
-            <button @click="handleReject(coach.id)" class="reject-btn">
-              拒绝
+            <button @click="handleTerminate(coach)" class="terminate-btn">
+              解除合作
             </button>
           </div>
         </div>
@@ -53,31 +50,60 @@
     <div v-if="message" :class="['message', messageType]">
       {{ message }}
     </div>
+
+    <!-- 解除合作弹窗 -->
+    <div v-if="showTerminateModal" class="modal-overlay">
+      <div class="modal">
+        <h3>解除合作</h3>
+        <p>确定要与教练 <strong>{{ selectedCoach?.name }}</strong> 解除合作吗？</p>
+        <div class="form-group">
+          <label>解约原因（必填）</label>
+          <textarea
+            v-model="terminateReason"
+            placeholder="请输入解约原因..."
+            rows="4"
+          ></textarea>
+        </div>
+        <div class="modal-buttons">
+          <button @click="showTerminateModal = false" class="cancel-btn">取消</button>
+          <button @click="confirmTerminate" class="confirm-btn" :disabled="!terminateReason.trim()">
+            确认解约
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getPendingCoaches } from '@/lib/api'
-import { adminAuditCoach } from '@/lib/edge-functions'
+import { supabase } from '@/lib/supabase'
+import { adminTerminateCoach } from '@/lib/edge-functions'
 
 const router = useRouter()
 const loading = ref(false)
-const pendingCoaches = ref([])
+const coaches = ref([])
 const message = ref('')
 const messageType = ref('success')
+const showTerminateModal = ref(false)
+const selectedCoach = ref(null)
+const terminateReason = ref('')
 
-// 加载待审核教练列表
-const loadPendingCoaches = async () => {
+// 加载在册教练列表
+// 条件：audit_status='approved' 且 cooperation_status='active'（或为空，默认视为在册）
+const loadCoaches = async () => {
   loading.value = true
   try {
-    const result = await getPendingCoaches()
-    if (result.success) {
-      pendingCoaches.value = result.data
-    } else {
-      showMessage('加载失败：' + result.error, 'error')
-    }
+    const { data, error } = await supabase
+      .from('coaches')
+      .select('id, name, phone, updated_at, cooperation_status')
+      .eq('audit_status', 'approved')
+      .or('cooperation_status.eq.active,cooperation_status.is.null')
+      .order('updated_at', { ascending: false })
+
+    if (error) throw error
+    coaches.value = data || []
   } catch (error) {
     showMessage('加载失败：' + error.message, 'error')
   } finally {
@@ -85,34 +111,26 @@ const loadPendingCoaches = async () => {
   }
 }
 
-// 通过审核
-const handleApprove = async (coachId) => {
-  try {
-    const result = await adminAuditCoach(coachId, 'approved')
-    if (result.success) {
-      showMessage('审核通过！', 'success')
-      await loadPendingCoaches()
-    } else {
-      showMessage('操作失败：' + result.error, 'error')
-    }
-  } catch (error) {
-    showMessage('操作失败：' + error.message, 'error')
-  }
+// 点击解除合作按钮
+const handleTerminate = (coach) => {
+  selectedCoach.value = coach
+  terminateReason.value = ''
+  showTerminateModal.value = true
 }
 
-// 拒绝审核
-const handleReject = async (coachId) => {
-  const reason = prompt('请输入拒绝原因：')
-  if (!reason) {
-    showMessage('请输入拒绝原因', 'error')
+// 确认解约
+const confirmTerminate = async () => {
+  if (!terminateReason.value.trim()) {
+    showMessage('请填写解约原因', 'error')
     return
   }
 
   try {
-    const result = await adminAuditCoach(coachId, 'rejected', reason)
+    const result = await adminTerminateCoach(selectedCoach.value.id, terminateReason.value.trim())
     if (result.success) {
-      showMessage('已拒绝该教练申请', 'success')
-      await loadPendingCoaches()
+      showMessage('已成功解除合作', 'success')
+      showTerminateModal.value = false
+      await loadCoaches()
     } else {
       showMessage('操作失败：' + result.error, 'error')
     }
@@ -137,18 +155,18 @@ const showMessage = (msg, type = 'success') => {
 }
 
 // 退出登录
-const handleLogout = () => {
-  localStorage.removeItem('adminToken')
+const handleLogout = async () => {
+  await supabase.auth.signOut()
   router.push('/admin/login')
 }
 
 onMounted(() => {
-  loadPendingCoaches()
+  loadCoaches()
 })
 </script>
 
 <style scoped>
-.coach-audit-container {
+.admin-coaches-container {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
@@ -281,8 +299,10 @@ onMounted(() => {
   gap: 10px;
 }
 
-.approve-btn, .reject-btn {
+.terminate-btn {
   padding: 10px 24px;
+  background: #ff4757;
+  color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -290,23 +310,8 @@ onMounted(() => {
   transition: all 0.3s;
 }
 
-.approve-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.approve-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.reject-btn {
-  background: #f5f5f5;
-  color: #666;
-}
-
-.reject-btn:hover {
-  background: #e0e0e0;
+.terminate-btn:hover {
+  background: #ff3838;
   transform: translateY(-2px);
 }
 
@@ -340,5 +345,105 @@ onMounted(() => {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  width: 90%;
+  max-width: 480px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.modal h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 20px;
+}
+
+.modal p {
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #666;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.cancel-btn {
+  padding: 10px 24px;
+  background: #f5f5f5;
+  color: #666;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.cancel-btn:hover {
+  background: #e0e0e0;
+}
+
+.confirm-btn {
+  padding: 10px 24px;
+  background: #ff4757;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.confirm-btn:hover:not(:disabled) {
+  background: #ff3838;
+  transform: translateY(-2px);
+}
+
+.confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>
