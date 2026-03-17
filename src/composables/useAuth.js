@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { supabase } from '../lib/supabase'
+import { phoneToAuthIdentity } from '../lib/authIdentity.js'
 
 const user = ref(null)
 const loading = ref(false)
@@ -90,8 +91,10 @@ export function useAuth() {
   const signIn = async (phone, password) => {
     loading.value = true
     try {
-      // 将手机号转换为邮箱格式
-      const email = `${phone}@fitness.app`
+      const { email, isValid } = phoneToAuthIdentity(phone)
+      if (!isValid) {
+        return { success: false, error: '手机号格式错误' }
+      }
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -112,14 +115,17 @@ export function useAuth() {
   const signUp = async (phone, password, role = 'member', memberInfo = null) => {
     loading.value = true
     try {
-      // 1. 使用手机号作为邮箱格式注册（Supabase 要求邮箱格式）
-      const email = `${phone}@fitness.app`
+      // 1. 使用手机号映射的邮箱身份注册
+      const { normalizedPhone, email, isValid } = phoneToAuthIdentity(phone)
+      if (!isValid) {
+        return { success: false, error: '手机号格式错误' }
+      }
 
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: { role, phone }
+          data: { role, phone: normalizedPhone }
         }
       })
       if (error) throw error
@@ -146,7 +152,7 @@ export function useAuth() {
               name: memberInfo.name,
               gender: memberInfo.gender,
               age: memberInfo.age,
-              phone: memberInfo.phone,
+              phone: normalizedPhone,
               height: memberInfo.height,
               initial_weight: memberInfo.initial_weight,
               initial_body_fat: memberInfo.initial_body_fat
@@ -208,6 +214,75 @@ export function useAuth() {
     }
   }
 
+  // 统一获取教练ID（兼容新老用户 + 历史数据双ID兼容）
+  // 返回：{ coachId, authUserId }
+  // - coachId: coaches.id（统一写入标准，必须有值才允许写入）
+  // - authUserId: auth.users.id（仅用于查询历史数据）
+  const resolveCurrentCoachId = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+
+      if (authUser) {
+        // ✅ 优先查 coaches 表：存在即为教练（不依赖 metadata）
+        const { data: coach, error } = await supabase
+          .from('coaches')
+          .select('id')
+          .eq('user_id', authUser.id)
+          .single()
+
+        if (coach) {
+          // ✅ 找到了 coaches 记录，直接返回
+          return { coachId: coach.id, authUserId: authUser.id }
+        }
+
+        // ⚠️ 有 authUser 但查不到 coaches 记录
+        // 可能是半迁移用户，检查 localStorage 兜底
+        const localUserId = localStorage.getItem('userId')
+        if (localUserId) {
+          // 验证这个 localUserId 是否存在于 coaches 表
+          const { data: localCoach, error: localError } = await supabase
+            .from('coaches')
+            .select('id')
+            .eq('id', localUserId)
+            .single()
+
+          if (localCoach) {
+            // 返回 localStorage 的教练ID + authUserId（用于查询历史数据）
+            return { coachId: localCoach.id, authUserId: authUser.id }
+          }
+        }
+
+        // ❌ 查不到有效的教练记录，不允许写入
+        console.error('找不到对应的教练记录')
+        return { coachId: null, authUserId: authUser.id }  // 只返回 authUserId 用于查询
+      }
+
+      // 老教练：localStorage 里的 userId 就是 coaches.id
+      const userId = localStorage.getItem('userId')
+      const userType = localStorage.getItem('userType')
+
+      if (userId && userType === 'coach') {
+        // 验证这个 userId 是否存在于 coaches 表
+        const { data: coach, error } = await supabase
+          .from('coaches')
+          .select('id')
+          .eq('id', userId)
+          .is('user_id', null)  // 确保是老用户
+          .single()
+
+        if (coach) {
+          return { coachId: coach.id, authUserId: null }
+        }
+      }
+
+      console.error('未找到有效的教练登录信息')
+      return { coachId: null, authUserId: null }
+    } catch (error) {
+      console.error('获取教练ID失败:', error)
+      return { coachId: null, authUserId: null }
+    }
+  }
+
   // 检查用户角色
   const getUserRole = async (userId) => {
     try {
@@ -234,10 +309,74 @@ export function useAuth() {
     isAuthenticatedComputed, // computed 版本（保持向后兼容）
     getCurrentUser,
     resolveCurrentMemberId, // 统一获取会员ID（新老用户兼容）
+    resolveCurrentCoachId, // 统一获取教练ID（新老用户兼容 + 双ID查询）
     signIn,
     signUp,
     signOut: logout, // 使用新的 logout 函数
     logout, // 也导出 logout 名称
     getUserRole
+  }
+}
+
+// 独立导出 getCoachId 函数，供其他 composables 直接导入使用
+// 与 resolveCurrentCoachId 保持同一套逻辑，避免两套判断漂移
+export async function getCoachId() {
+  try {
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+
+    if (authUser) {
+      // ✅ 优先查 coaches 表：存在即为教练（不依赖 metadata）
+      const { data: coach } = await supabase
+        .from('coaches')
+        .select('id')
+        .eq('user_id', authUser.id)
+        .maybeSingle()
+
+      if (coach) {
+        return { coachId: coach.id, authUserId: authUser.id }
+      }
+
+      // ⚠️ 没找到 coaches 记录，尝试老用户兜底
+      // 老教练：localStorage 里的 userId 就是 coaches.id，且 userType === 'coach'
+      const userId = localStorage.getItem('userId')
+      const userType = localStorage.getItem('userType')
+
+      if (userId && userType === 'coach') {
+        const { data: localCoach } = await supabase
+          .from('coaches')
+          .select('id')
+          .eq('id', userId)
+          .is('user_id', null)  // 确保是老用户
+          .maybeSingle()
+
+        if (localCoach) {
+          return { coachId: localCoach.id, authUserId: authUser.id }
+        }
+      }
+
+      return { coachId: null, authUserId: authUser.id }
+    }
+
+    // 未登录，尝试老用户兜底
+    const userId = localStorage.getItem('userId')
+    const userType = localStorage.getItem('userType')
+
+    if (userId && userType === 'coach') {
+      const { data: coach } = await supabase
+        .from('coaches')
+        .select('id')
+        .eq('id', userId)
+        .is('user_id', null)  // 确保是老用户
+        .maybeSingle()
+
+      if (coach) {
+        return { coachId: coach.id, authUserId: null }
+      }
+    }
+
+    return { coachId: null, authUserId: null }
+  } catch (error) {
+    console.error('获取教练ID失败:', error)
+    return { coachId: null, authUserId: null }
   }
 }

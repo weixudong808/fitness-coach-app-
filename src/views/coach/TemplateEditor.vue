@@ -236,6 +236,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { supabase } from '../../lib/supabase'
+import { getCoachId } from '../../composables/useAuth'
 
 const router = useRouter()
 const route = useRoute()
@@ -622,13 +623,16 @@ const handleSubmit = async () => {
         }
 
         // 1. 创建或更新训练模板
+        const { coachId } = await getCoachId()
+        if (!coachId) throw new Error('未绑定教练，无法保存模板')
+
         const templateData = {
           name: formData.name,
           description: formData.description,
           target_goal: formData.target_goal,
           difficulty_level: formData.difficulty_level,
           training_stage: formData.training_stage,
-          coach_id: user.id,
+          coach_id: coachId,
           is_template: !isExclusiveMode.value, // 关键：专属计划标记为 false
           member_id: isExclusiveMode.value ? targetMemberId.value : null
         }
@@ -704,7 +708,7 @@ const handleSubmit = async () => {
             .insert([{
               member_id: targetMemberId.value,
               template_id: savedTemplateId,
-              coach_id: user.id,
+              coach_id: coachId,
               start_date: new Date().toISOString().split('T')[0],
               status: 'active',
               notes: '专属训练计划'

@@ -1,31 +1,31 @@
 <template>
   <div class="assign-plan-container">
-    <!-- 导航菜单 -->
-    <el-menu
-      mode="horizontal"
-      :default-active="activeMenu"
-      @select="handleMenuSelect"
-      style="margin-bottom: 20px"
-    >
-      <el-menu-item index="/coach/members">会员管理</el-menu-item>
-      <el-menu-item index="/coach/templates">训练计划模板</el-menu-item>
-      <el-menu-item index="/coach/assign-plan">分配训练计划</el-menu-item>
-    </el-menu>
+    <!-- 自定义导航栏 -->
+    <div class="nav-header">
+      <div class="nav-buttons">
+        <button @click="$router.push('/coach/members')" class="nav-btn">
+          会员管理
+        </button>
+        <button @click="$router.push('/coach/templates')" class="nav-btn">
+          训练计划模板
+        </button>
+        <button class="nav-btn active">分配训练计划</button>
+      </div>
+    </div>
 
     <!-- 页面标题 -->
     <div class="page-header">
       <h1>分配训练计划</h1>
     </div>
 
-    <div v-loading="loading" style="min-height: 400px">
+    <div v-loading="loading" class="content-wrapper">
       <!-- 第一步：选择会员 -->
-      <el-card class="section-card">
-        <template #header>
-          <div class="section-header">
-            <h3>第一步：选择会员</h3>
-            <span class="selected-count">已选择 {{ selectedMembers.length }} 个会员</span>
-          </div>
-        </template>
+      <div class="section-card">
+        <div class="section-header">
+          <h3>第一步：选择会员</h3>
+          <span class="selected-count">已选择 {{ selectedMembers.length }} 个会员</span>
+        </div>
+        <div class="section-body">
 
         <!-- 搜索框 -->
         <el-input
@@ -55,23 +55,23 @@
         </el-table>
 
         <el-empty v-if="filteredMembers.length === 0" description="没有找到会员" />
-      </el-card>
+        </div>
+      </div>
 
       <!-- 第二步：选择模板 -->
-      <el-card class="section-card">
-        <template #header>
-          <div class="section-header">
-            <h3>第二步：选择训练模板</h3>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <el-button type="success" size="small" @click="showCreateTemplateDialog = true">
-                + 快速创建模板
-              </el-button>
-              <span v-if="selectedTemplate" class="selected-info">
-                已选择：{{ selectedTemplate.name }}
-              </span>
-            </div>
+      <div class="section-card">
+        <div class="section-header">
+          <h3>第二步：选择训练模板</h3>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <el-button type="success" size="small" @click="showCreateTemplateDialog = true">
+              + 快速创建模板
+            </el-button>
+            <span v-if="selectedTemplate" class="selected-info">
+              已选择：{{ selectedTemplate.name }}
+            </span>
           </div>
-        </template>
+        </div>
+        <div class="section-body">
 
         <!-- 搜索框 -->
         <el-input
@@ -92,30 +92,33 @@
             :lg="6"
             style="margin-bottom: 20px"
           >
-            <el-card
-              :class="['template-card', { 'selected': selectedTemplate?.id === template.id }]"
-              shadow="hover"
-              @click="selectTemplate(template)"
-            >
-              <h4>{{ template.name }}</h4>
-              <div class="template-tags">
-                <el-tag type="success" size="small">{{ template.target_goal }}</el-tag>
-                <el-tag type="warning" size="small">{{ getDifficultyLabel(template.difficulty_level) }}</el-tag>
-                <el-tag type="info" size="small">{{ template.exercise_count }} 个动作</el-tag>
-              </div>
-              <p class="template-description">{{ template.description || '暂无描述' }}</p>
-            </el-card>
+            <div class="template-card-wrap" @click="selectTemplate(template)">
+              <el-card
+                :class="['template-card', { 'selected': selectedTemplate?.id === template.id }]"
+                shadow="hover"
+              >
+                <h4>{{ template.name }}</h4>
+                <div class="template-tags">
+                  <el-tag type="success" size="small">{{ template.target_goal }}</el-tag>
+                  <el-tag type="warning" size="small">{{ getDifficultyLabel(template.difficulty_level) }}</el-tag>
+                  <el-tag type="info" size="small">{{ template.exercise_count }} 个动作</el-tag>
+                </div>
+                <p class="template-description">{{ template.description || '暂无描述' }}</p>
+              </el-card>
+            </div>
           </el-col>
         </el-row>
 
         <el-empty v-else description="没有找到训练模板" />
-      </el-card>
+        </div>
+      </div>
 
       <!-- 第三步：设置参数 -->
-      <el-card class="section-card">
-        <template #header>
+      <div class="section-card">
+        <div class="section-header">
           <h3>第三步：设置参数</h3>
-        </template>
+        </div>
+        <div class="section-body">
 
         <el-form :model="assignForm" label-width="100px" style="max-width: 600px">
           <el-form-item label="开始日期">
@@ -136,7 +139,8 @@
             />
           </el-form-item>
         </el-form>
-      </el-card>
+        </div>
+      </div>
 
       <!-- 操作按钮 -->
       <div class="action-buttons">
@@ -231,6 +235,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAssignPlan } from '../../composables/useAssignPlan'
 import { supabase } from '../../lib/supabase'
+import { getCoachId } from '../../composables/useAuth'
 
 const router = useRouter()
 const route = useRoute()
@@ -238,15 +243,6 @@ const { loading, members, templates, loadMembers, loadTemplates, assignPlan } = 
 
 // 表格引用
 const memberTableRef = ref(null)
-
-// 当前激活的菜单
-const activeMenu = ref('/coach/assign-plan')
-
-// 菜单选择处理
-const handleMenuSelect = (index) => {
-  console.log('菜单跳转:', index)
-  router.push(index)
-}
 
 // 会员相关
 const memberSearchKeyword = ref('')
@@ -287,7 +283,6 @@ onMounted(async () => {
     // 如果 URL 中有 memberId 参数，自动勾选该会员
     const memberId = route.query.memberId
     if (memberId) {
-      console.log('自动勾选会员ID:', memberId)
       // 等待数据加载完成后勾选
       setTimeout(() => {
         const member = members.value.find(m => m.id === memberId)
@@ -297,7 +292,6 @@ onMounted(async () => {
           if (memberTableRef.value) {
             memberTableRef.value.toggleRowSelection(member, true)
           }
-          console.log('已自动勾选会员:', member.name)
         }
       }, 100)
     }
@@ -376,6 +370,12 @@ const handleAssign = async () => {
       assignForm.value.notes
     )
 
+    // 检查是否有成功分配
+    if (count === 0) {
+      ElMessage.error('分配失败：0个成功，请查看控制台错误')
+      return
+    }
+
     ElMessage.success(`成功为 ${count} 个会员分配训练计划`)
 
     // 检查是否从会员详情页跳转过来
@@ -399,7 +399,12 @@ const handleAssign = async () => {
     }
 
     // 刷新数据
-    await loadMembers()
+    try {
+      await loadMembers()
+    } catch (refreshError) {
+      console.error('刷新会员列表失败:', refreshError)
+      ElMessage.warning('已分配成功，但刷新列表失败')
+    }
   } catch (error) {
     ElMessage.error('分配失败：' + error.message)
   } finally {
@@ -430,9 +435,9 @@ const handleQuickCreateTemplate = async () => {
   try {
     creating.value = true
 
-    // 获取当前登录用户ID
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('未登录')
+    // 获取教练ID
+    const { coachId } = await getCoachId()
+    if (!coachId) throw new Error('未绑定教练，无法创建模板')
 
     // 创建模板
     const { data, error } = await supabase
@@ -443,7 +448,7 @@ const handleQuickCreateTemplate = async () => {
         target_goal: newTemplate.value.target_goal,
         difficulty_level: newTemplate.value.difficulty_level,
         training_stage: newTemplate.value.training_stage,
-        coach_id: user.id
+        coach_id: coachId
       }])
       .select()
       .single()
@@ -561,6 +566,10 @@ const handleQuickCreateTemplate = async () => {
   text-overflow: ellipsis;
 }
 
+.template-card-wrap {
+  cursor: pointer;
+}
+
 .action-buttons {
   display: flex;
   justify-content: center;
@@ -568,5 +577,81 @@ const handleQuickCreateTemplate = async () => {
   margin-top: 32px;
   padding-top: 24px;
   border-top: 1px solid #e4e7ed;
+}
+
+/* ========== 自定义导航栏样式 ========== */
+.nav-header {
+  background: white;
+  border-radius: 12px;
+  padding: 20px 30px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.nav-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.nav-btn {
+  padding: 10px 24px;
+  background: #f5f5f5;
+  color: #666;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.nav-btn:hover {
+  background: #e0e0e0;
+  transform: translateY(-2px);
+}
+
+.nav-btn.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+/* ========== 内容容器样式 ========== */
+.content-wrapper {
+  min-height: 400px;
+}
+
+/* ========== 自定义卡片样式 ========== */
+.section-card {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #f5f5f5;
+}
+
+.section-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+  font-weight: 600;
+}
+
+.section-body {
+  /* 内容区域 */
+}
+
+.selected-count,
+.selected-info {
+  color: #667eea;
+  font-size: 14px;
+  font-weight: 500;
 }
 </style>

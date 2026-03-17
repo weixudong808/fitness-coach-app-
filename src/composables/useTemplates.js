@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
+import { getCoachId } from './useAuth'
 
 const templates = ref([])
 const loading = ref(false)
@@ -9,14 +10,17 @@ export function useTemplates() {
   const loadTemplates = async () => {
     loading.value = true
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('未登录')
+      const { coachId, authUserId } = await getCoachId()
+
+      // 查询兼容：双ID兼容查询（同时查 coachId 和 authUserId）
+      const ids = [coachId, authUserId].filter(Boolean)
+      if (ids.length === 0) throw new Error('未登录或未绑定教练')
 
       // 获取模板列表
       const { data: templatesData, error: templatesError } = await supabase
         .from('training_templates')
         .select('*')
-        .eq('coach_id', user.id)
+        .in('coach_id', ids)
         .eq('is_template', true) // 关键：只加载模板，不加载专属计划
         .order('created_at', { ascending: false })
 
@@ -87,14 +91,14 @@ export function useTemplates() {
   const createTemplate = async (templateData, exercises) => {
     loading.value = true
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('未登录')
+      const { coachId } = await getCoachId()
+      if (!coachId) throw new Error('未绑定教练，无法创建模板')
 
       // 插入模板基本信息
       const { data: newTemplate, error: templateError } = await supabase
         .from('training_templates')
         .insert([{
-          coach_id: user.id,
+          coach_id: coachId,
           name: templateData.name,
           description: templateData.description,
           target_goal: templateData.target_goal,

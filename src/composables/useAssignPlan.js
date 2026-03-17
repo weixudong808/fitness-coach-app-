@@ -1,5 +1,7 @@
 import { ref } from 'vue'
 import { supabase } from '../lib/supabase'
+import { getCoachId } from './useAuth'
+import { getCoachMembers } from '../lib/api-relations'
 
 const loading = ref(false)
 const members = ref([])
@@ -11,15 +13,17 @@ export function useAssignPlan() {
   const loadMembers = async () => {
     loading.value = true
     try {
-      const { data, error } = await supabase
-        .from('members')
-        .select('id, name, gender, age, phone')
-        .order('created_at', { ascending: false })
+      const { coachId } = await getCoachId()
+      if (!coachId) throw new Error('未绑定教练，无法加载会员')
 
-      if (error) throw error
+      const result = await getCoachMembers(coachId)
+      if (!result.success) throw new Error(result.error || '加载会员失败')
 
-      members.value = data || []
-      return data
+      members.value = (result.data || [])
+        .map(item => item.members)
+        .filter(Boolean)
+
+      return members.value
     } catch (error) {
       console.error('加载会员列表失败:', error)
       throw error
@@ -32,14 +36,17 @@ export function useAssignPlan() {
   const loadTemplates = async () => {
     loading.value = true
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('未登录')
+      const { coachId, authUserId } = await getCoachId()
+
+      // 查询兼容：双ID兼容查询（同时查 coachId 和 authUserId）
+      const ids = [coachId, authUserId].filter(Boolean)
+      if (ids.length === 0) throw new Error('未登录或未绑定教练')
 
       // 获取模板列表
       const { data: templatesData, error: templatesError } = await supabase
         .from('training_templates')
         .select('*')
-        .eq('coach_id', user.id)
+        .in('coach_id', ids)
         .eq('is_template', true) // 关键：只加载模板，不加载专属计划
         .order('created_at', { ascending: false })
 
@@ -173,8 +180,8 @@ export function useAssignPlan() {
   const assignPlan = async (memberIds, templateId, startDate, notes) => {
     loading.value = true
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('未登录')
+      const { coachId } = await getCoachId()
+      if (!coachId) throw new Error('未绑定教练，无法分配计划')
 
       let successCount = 0
 
@@ -182,7 +189,7 @@ export function useAssignPlan() {
       for (const memberId of memberIds) {
         try {
           // 1. 深度复制模板
-          const newTemplateId = await deepCopyTemplate(templateId, memberId, user.id)
+          const newTemplateId = await deepCopyTemplate(templateId, memberId, coachId)
 
           // 2. 在 member_plans 中创建分配记录
           const { error: assignError } = await supabase
@@ -190,7 +197,7 @@ export function useAssignPlan() {
             .insert([{
               member_id: memberId,
               template_id: newTemplateId,  // 使用新创建的专属计划ID
-              coach_id: user.id,
+              coach_id: coachId,
               start_date: startDate,
               status: 'active',
               notes: notes || null
@@ -201,6 +208,7 @@ export function useAssignPlan() {
           successCount++
         } catch (error) {
           console.error(`为会员 ${memberId} 分配计划失败:`, error)
+          console.error('错误详情:', JSON.stringify(error, null, 2))
           // 继续处理下一个会员
         }
       }
