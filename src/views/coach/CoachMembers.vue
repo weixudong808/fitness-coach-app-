@@ -8,6 +8,9 @@
           邀请码管理
         </button>
         <button class="nav-btn active">会员管理</button>
+        <button @click="$router.push('/coach/templates')" class="nav-btn">
+          训练模板
+        </button>
         <button @click="handleLogout" class="logout-btn">退出登录</button>
       </div>
     </div>
@@ -73,6 +76,9 @@
           </div>
 
           <div class="action-buttons">
+            <button @click="handleViewMember(member.id)" class="view-btn">
+              查看详情
+            </button>
             <button @click="handleDeleteMember(member.relationId)" class="delete-btn">
               删除会员
             </button>
@@ -296,6 +302,15 @@ const handleAddMember = async (memberId) => {
   } catch (error) {
     showMessage('操作失败：' + error.message, 'error')
   }
+}
+
+// 查看会员详情
+const handleViewMember = (memberId) => {
+  if (!memberId) return
+  router.push({
+    name: 'coach-member-detail',
+    params: { id: memberId }
+  })
 }
 
 // 删除会员
@@ -525,7 +540,7 @@ onMounted(() => {
   gap: 10px;
 }
 
-.approve-btn, .add-btn, .delete-btn, .reject-btn {
+.approve-btn, .add-btn, .delete-btn, .reject-btn, .view-btn {
   padding: 10px 24px;
   border: none;
   border-radius: 8px;
@@ -552,6 +567,17 @@ onMounted(() => {
 .delete-btn:hover {
   background: #ff3838;
   transform: translateY(-2px);
+}
+
+.view-btn {
+  background: #8b5cf6;
+  color: white;
+}
+
+.view-btn:hover {
+  background: #7c3aed;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
 .reject-btn {

@@ -1,197 +1,203 @@
 <template>
   <div class="member-detail-container">
-    <el-page-header @back="goBack" content="会员详情" />
+    <!-- 返回按钮 -->
+    <div class="back-header">
+      <button @click="goBack" class="back-btn">
+        <span>←</span>
+        <span>返回</span>
+      </button>
+      <div class="page-title">会员详情</div>
+    </div>
 
-    <el-card v-loading="loading" style="margin-top: 20px">
-      <template #header>
+    <!-- 加载状态 -->
+    <div v-if="loading" class="loading">加载中...</div>
+
+    <!-- 错误状态 -->
+    <div v-else-if="errorMessage" class="error-state">
+      <div class="error-icon">⚠️</div>
+      <div class="error-text">{{ errorMessage }}</div>
+      <button @click="loadMemberDetail" class="retry-btn">重试</button>
+    </div>
+
+    <template v-else>
+      <!-- 会员信息卡片 -->
+      <div class="info-card">
         <div class="card-header">
-          <h3>会员信息</h3>
-          <el-button type="primary" size="small" @click="handleEditMember">
-            编辑
-          </el-button>
+          <div class="card-title">会员信息</div>
+          <button @click="handleEditMember" class="edit-btn">编辑</button>
         </div>
-      </template>
 
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="姓名">{{ member?.name }}</el-descriptions-item>
-        <el-descriptions-item label="性别">
-          {{ member?.gender === 'male' ? '男' : '女' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="年龄">{{ member?.age }}</el-descriptions-item>
-        <el-descriptions-item label="电话">{{ member?.phone }}</el-descriptions-item>
-        <el-descriptions-item label="邮箱">{{ member?.email }}</el-descriptions-item>
-        <el-descriptions-item label="身高">{{ member?.height }} cm</el-descriptions-item>
-        <el-descriptions-item label="初始体重">
-          {{ member?.initial_weight }} kg
-        </el-descriptions-item>
-        <el-descriptions-item label="初始体脂率">
-          {{ member?.initial_body_fat }}%
-        </el-descriptions-item>
-        <el-descriptions-item label="注册时间" :span="2">
-          {{ formatDate(member?.created_at) }}
-        </el-descriptions-item>
-      </el-descriptions>
-    </el-card>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">姓名</div>
+            <div class="info-value">{{ member?.name }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">性别</div>
+            <div class="info-value">{{ member?.gender === 'male' ? '男' : '女' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">年龄</div>
+            <div class="info-value">{{ member?.age }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">电话</div>
+            <div class="info-value">{{ member?.phone }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">邮箱</div>
+            <div class="info-value">{{ member?.email || '-' }}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">身高</div>
+            <div class="info-value">{{ member?.height }} cm</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">初始体重</div>
+            <div class="info-value">{{ member?.initial_weight }} kg</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">初始体脂率</div>
+            <div class="info-value">{{ member?.initial_body_fat }}%</div>
+          </div>
+          <div class="info-item info-item-full">
+            <div class="info-label">注册时间</div>
+            <div class="info-value">{{ formatDate(member?.created_at) }}</div>
+          </div>
+        </div>
+      </div>
 
-    <!-- 训练计划 -->
-    <el-card style="margin-top: 20px">
-      <template #header>
+      <!-- 训练计划卡片 -->
+      <div class="info-card">
         <div class="card-header">
-          <h3>训练计划</h3>
-          <el-dropdown @command="handlePlanCommand" trigger="click">
-            <el-button type="primary" size="small">
-              分配新计划
-              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="from-template">
-                  <el-icon><Document /></el-icon>
-                  从模板选择
-                </el-dropdown-item>
-                <el-dropdown-item command="create-exclusive">
-                  <el-icon><Edit /></el-icon>
-                  创建专属计划
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <div class="card-title">训练计划</div>
+          <div class="plan-actions-header">
+            <button @click="handlePlanCommand('from-template')" class="add-plan-btn">
+              <span>📋</span>
+              <span>从模板选择</span>
+            </button>
+            <button @click="handlePlanCommand('create-exclusive')" class="add-plan-btn">
+              <span>✏️</span>
+              <span>创建专属计划</span>
+            </button>
+          </div>
         </div>
-      </template>
 
-      <el-table
-        v-if="memberPlans.length > 0"
-        :data="memberPlans"
-        style="width: 100%"
-      >
-        <el-table-column prop="template_name" label="训练模板" width="200" />
-        <el-table-column prop="target_goal" label="训练目标" width="120" />
-        <el-table-column label="开始日期" width="120">
-          <template #default="{ row }">
-            {{ formatDateShort(row.start_date) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="结束日期" width="120">
-          <template #default="{ row }">
-            {{ row.end_date ? formatDateShort(row.end_date) : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ getStatusLabel(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="notes" label="备注" show-overflow-tooltip />
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              type="primary"
-              size="small"
-              @click="goToPlanDetail(row.id)"
-            >
-              查看详情
-            </el-button>
-            <el-button
-              v-if="row.status === 'active'"
-              type="warning"
-              size="small"
-              @click="handleCancelPlan(row.id)"
-            >
-              取消
-            </el-button>
-            <el-button
-              type="danger"
-              size="small"
-              @click="handleDeletePlan(row.id)"
-            >
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        <div v-if="memberPlans.length === 0" class="empty-state">
+          <div class="empty-icon">📋</div>
+          <div>暂无训练计划</div>
+        </div>
 
-      <el-empty v-else description="暂无训练计划" />
-    </el-card>
-
-    <!-- 进步统计 -->
-    <el-card style="margin-top: 20px">
-      <template #header>
-        <h3>进步统计</h3>
-      </template>
-
-      <div v-loading="loadingStats">
-        <div v-if="trainingStats.totalSessions > 0">
-          <!-- 统计概览 -->
-          <el-row :gutter="20" style="margin-bottom: 30px;">
-            <el-col :span="6">
-              <el-statistic title="总训练次数" :value="trainingStats.totalSessions">
-                <template #suffix>次</template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="本月训练次数" :value="trainingStats.monthSessions">
-                <template #suffix>次</template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="训练完成率" :value="trainingStats.completionRate" :precision="1">
-                <template #suffix>%</template>
-              </el-statistic>
-            </el-col>
-            <el-col :span="6">
-              <el-statistic title="最近训练" :value="trainingStats.lastTrainingDate" />
-            </el-col>
-          </el-row>
-
-          <!-- 训练频率趋势图 -->
-          <div style="margin-bottom: 30px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-              <h4 style="margin: 0;">训练频率趋势</h4>
-              <div style="display: flex; gap: 10px; align-items: center;">
-                <el-select v-model="dateRangeType" @change="handleDateRangeChange" style="width: 150px;">
-                  <el-option label="本月" value="thisMonth" />
-                  <el-option label="上月" value="lastMonth" />
-                  <el-option label="最近30天" value="recent30" />
-                  <el-option label="自定义" value="custom" />
-                </el-select>
-                <el-date-picker
-                  v-if="dateRangeType === 'custom'"
-                  v-model="customDateRange"
-                  type="daterange"
-                  range-separator="至"
-                  start-placeholder="开始日期"
-                  end-placeholder="结束日期"
-                  format="YYYY-MM-DD"
-                  value-format="YYYY-MM-DD"
-                  @change="handleCustomDateChange"
-                  style="width: 280px;"
-                />
+        <div v-else class="plan-list">
+          <div v-for="plan in memberPlans" :key="plan.id" class="plan-item">
+            <div class="plan-info">
+              <div class="plan-name">{{ plan.template_name }}</div>
+              <div class="plan-meta">
+                <span>目标：{{ plan.target_goal }}</span>
+                <span>开始：{{ formatDateShort(plan.start_date) }}</span>
+                <span v-if="plan.end_date">结束：{{ formatDateShort(plan.end_date) }}</span>
+                <span v-if="plan.notes">备注：{{ plan.notes }}</span>
               </div>
             </div>
-            <v-chart :option="frequencyChartOption" style="height: 300px;" />
-          </div>
-
-          <!-- 动作进步趋势 -->
-          <div v-if="exerciseProgressData.length > 0">
-            <h4 style="margin-bottom: 15px;">动作进步趋势</h4>
-            <el-select v-model="selectedExercise" placeholder="选择动作" style="width: 300px; margin-bottom: 15px;">
-              <el-option
-                v-for="exercise in exerciseProgressData"
-                :key="exercise.name"
-                :label="exercise.name"
-                :value="exercise.name"
-              />
-            </el-select>
-            <v-chart :option="progressChartOption" style="height: 350px;" />
+            <div class="plan-actions">
+              <span :class="['status-badge',
+                plan.status === 'completed' ? 'completed' : '',
+                plan.status === 'cancelled' ? 'cancelled' : '']">
+                {{ getStatusLabel(plan.status) }}
+              </span>
+              <button @click="goToPlanDetail(plan.id)" class="view-detail-btn">查看详情</button>
+              <button v-if="plan.status === 'active'" @click="handleCancelPlan(plan.id)" class="cancel-btn">
+                取消
+              </button>
+              <button @click="handleDeletePlan(plan.id)" class="delete-btn">
+                删除
+              </button>
+            </div>
           </div>
         </div>
-        <el-empty v-else description="暂无训练数据" />
       </div>
-    </el-card>
 
-    <!-- 编辑会员对话框 -->
+      <!-- 进步统计卡片 -->
+      <div class="info-card">
+        <div class="card-header">
+          <div class="card-title">进步统计</div>
+        </div>
+
+        <div v-if="loadingStats" class="loading-stats">加载统计数据中...</div>
+
+        <template v-else>
+          <div v-if="trainingStats.totalSessions > 0">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value">{{ trainingStats.totalSessions }}</div>
+                <div class="stat-label">总训练次数</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">{{ trainingStats.monthSessions }}</div>
+                <div class="stat-label">本月训练次数</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">{{ trainingStats.completionRate }}%</div>
+                <div class="stat-label">计划完成率</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">{{ trainingStats.lastTrainingDate }}</div>
+                <div class="stat-label">最近训练</div>
+              </div>
+            </div>
+
+            <!-- 训练频率趋势 -->
+            <div class="chart-section">
+              <div class="chart-header">
+                <div class="chart-title">训练频率趋势</div>
+                <div class="date-filter">
+                  <select v-model="dateRangeType" @change="handleDateRangeChange" class="date-select">
+                    <option value="thisMonth">本月</option>
+                    <option value="lastMonth">上月</option>
+                    <option value="recent30">最近30天</option>
+                    <option value="custom">自定义</option>
+                  </select>
+                  <div v-if="dateRangeType === 'custom'" class="custom-date-range">
+                    <input type="date" v-model="customDateRange[0]" class="date-input" />
+                    <span>至</span>
+                    <input type="date" v-model="customDateRange[1]" class="date-input" />
+                    <button @click="applyCustomDateRange" class="apply-btn">应用</button>
+                  </div>
+                </div>
+              </div>
+              <div class="chart-container">
+                <v-chart :option="frequencyChartOption" style="height: 300px;" />
+              </div>
+            </div>
+
+            <!-- 动作进步趋势 -->
+            <div v-if="exerciseProgressData.length > 0" class="chart-section">
+              <div class="chart-header">
+                <div class="chart-title">动作进步趋势</div>
+              </div>
+              <div class="exercise-selector">
+                <label>选择动作：</label>
+                <select v-model="selectedExercise" class="exercise-select">
+                  <option v-for="exercise in exerciseProgressData" :key="exercise.name" :value="exercise.name">
+                    {{ exercise.name }}
+                  </option>
+                </select>
+              </div>
+              <div class="chart-container">
+                <v-chart :option="progressChartOption" style="height: 350px;" />
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="empty-state">
+            <div class="empty-icon">📊</div>
+            <div>暂无训练数据</div>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- 编辑会员对话框 - 保留Element Plus -->
     <el-dialog
       v-model="showEditDialog"
       title="编辑会员信息"
@@ -210,7 +216,16 @@
         </el-form-item>
 
         <el-form-item label="年龄" prop="age">
-          <el-input-number v-model="memberForm.age" :min="1" :max="120" />
+          <input
+            v-model.number="memberForm.age"
+            type="number"
+            :min="1"
+            :max="120"
+            :disabled="saving"
+            class="custom-input"
+            placeholder="请输入年龄"
+            @blur="memberFormRef?.validateField('age')"
+          />
         </el-form-item>
 
         <el-form-item label="电话" prop="phone">
@@ -222,15 +237,44 @@
         </el-form-item>
 
         <el-form-item label="身高(cm)" prop="height">
-          <el-input-number v-model="memberForm.height" :min="100" :max="250" />
+          <input
+            v-model.number="memberForm.height"
+            type="number"
+            :min="100"
+            :max="250"
+            :disabled="saving"
+            class="custom-input"
+            placeholder="请输入身高"
+            @blur="memberFormRef?.validateField('height')"
+          />
         </el-form-item>
 
         <el-form-item label="初始体重(kg)" prop="initial_weight">
-          <el-input-number v-model="memberForm.initial_weight" :min="30" :max="300" :precision="1" />
+          <input
+            v-model.number="memberForm.initial_weight"
+            type="number"
+            :min="30"
+            :max="300"
+            step="0.1"
+            :disabled="saving"
+            class="custom-input"
+            placeholder="请输入初始体重"
+            @blur="memberFormRef?.validateField('initial_weight')"
+          />
         </el-form-item>
 
         <el-form-item label="初始体脂率(%)" prop="initial_body_fat">
-          <el-input-number v-model="memberForm.initial_body_fat" :min="5" :max="60" :precision="1" />
+          <input
+            v-model.number="memberForm.initial_body_fat"
+            type="number"
+            :min="5"
+            :max="60"
+            step="0.1"
+            :disabled="saving"
+            class="custom-input"
+            placeholder="请输入初始体脂率（选填）"
+            @blur="memberFormRef?.validateField('initial_body_fat')"
+          />
         </el-form-item>
       </el-form>
 
@@ -243,10 +287,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Document, Edit } from '@element-plus/icons-vue'
+// 移除 Element Plus 图标导入（已不需要）
+// import { ArrowDown, Document, Edit } from '@element-plus/icons-vue'
 import { supabase } from '../../lib/supabase'
 import { useAssignPlan } from '../../composables/useAssignPlan'
 import VChart from 'vue-echarts'
@@ -278,6 +323,7 @@ const { getMemberPlans, cancelAssignment, deleteAssignment } = useAssignPlan()
 const member = ref(null)
 const memberPlans = ref([])
 const loading = ref(false)
+const errorMessage = ref('') // 新增错误状态
 
 // 编辑会员相关
 const showEditDialog = ref(false)
@@ -297,10 +343,22 @@ const memberForm = reactive({
 const memberRules = {
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
-  age: [{ required: true, message: '请输入年龄', trigger: 'blur' }],
+  age: [
+    { required: true, message: '请输入年龄', trigger: 'blur' },
+    { type: 'number', min: 1, max: 120, message: '年龄必须在1-120之间', trigger: 'blur' }
+  ],
   phone: [{ required: true, message: '请输入电话', trigger: 'blur' }],
-  height: [{ required: true, message: '请输入身高', trigger: 'blur' }],
-  initial_weight: [{ required: true, message: '请输入初始体重', trigger: 'blur' }]
+  height: [
+    { required: true, message: '请输入身高', trigger: 'blur' },
+    { type: 'number', min: 100, max: 250, message: '身高必须在100-250cm之间', trigger: 'blur' }
+  ],
+  initial_weight: [
+    { required: true, message: '请输入初始体重', trigger: 'blur' },
+    { type: 'number', min: 30, max: 300, message: '体重必须在30-300kg之间', trigger: 'blur' }
+  ],
+  initial_body_fat: [
+    { type: 'number', min: 5, max: 60, message: '体脂率必须在5-60%之间', trigger: 'blur' }
+  ]
 }
 
 // 进步统计相关
@@ -318,8 +376,8 @@ const selectedExercise = ref('')
 // 日期范围选择
 const dateRangeType = ref('recent30') // 'thisMonth' | 'lastMonth' | 'recent30' | 'custom'
 const customDateRange = ref([
-  new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-  new Date()
+  new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  new Date().toISOString().split('T')[0]
 ])
 
 // 计算日期范围
@@ -369,6 +427,7 @@ const getDateRange = () => {
 
 const loadMemberDetail = async () => {
   loading.value = true
+  errorMessage.value = '' // 清空错误信息
   try {
     // 并行加载会员信息和训练计划
     const [memberResult, plansResult] = await Promise.all([
@@ -388,6 +447,7 @@ const loadMemberDetail = async () => {
     await loadTrainingStats()
   } catch (error) {
     console.error('加载会员详情失败:', error)
+    errorMessage.value = '加载会员详情失败，请重试' // 设置错误信息
     ElMessage.error('加载会员详情失败')
   } finally {
     loading.value = false
@@ -484,14 +544,29 @@ const loadTrainingStats = async () => {
 
 // 处理日期范围类型变化
 const handleDateRangeChange = () => {
-  loadTrainingStats()
-}
-
-// 处理自定义日期变化
-const handleCustomDateChange = () => {
-  if (customDateRange.value && customDateRange.value.length === 2) {
+  // 如果不是自定义模式，立即加载数据
+  if (dateRangeType.value !== 'custom') {
     loadTrainingStats()
   }
+}
+
+// 应用自定义日期范围
+const applyCustomDateRange = () => {
+  const [start, end] = customDateRange.value
+
+  // 校验：必填
+  if (!start || !end) {
+    ElMessage.warning('请选择开始和结束日期')
+    return
+  }
+
+  // 校验：开始日期不能晚于结束日期
+  if (new Date(start) > new Date(end)) {
+    ElMessage.warning('开始日期不能晚于结束日期')
+    return
+  }
+
+  loadTrainingStats()
 }
 
 // 加载动作进步数据
@@ -932,13 +1007,561 @@ onMounted(() => {
 
 <style scoped>
 .member-detail-container {
+  background: #f5f7fa;
   padding: 20px;
+  min-height: 100vh;
+}
+
+/* 返回按钮 */
+.back-header {
+  background: white;
+  border-radius: 12px;
+  padding: 20px 30px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.back-btn {
+  padding: 8px 16px;
+  background: #f5f5f5;
+  color: #666;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.back-btn:hover {
+  background: #e0e0e0;
+  transform: translateX(-2px);
+}
+
+.page-title {
+  font-size: 20px;
+  color: #333;
+  font-weight: 600;
+}
+
+/* 加载状态 */
+.loading {
+  text-align: center;
+  padding: 60px;
+  color: #999;
+  font-size: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.loading-stats {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  font-size: 14px;
+}
+
+/* 错误状态 */
+.error-state {
+  text-align: center;
+  padding: 60px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.error-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+}
+
+.error-text {
+  color: #ef4444;
+  font-size: 16px;
+  margin-bottom: 20px;
+}
+
+.retry-btn {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.retry-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* 信息卡片 */
+.info-card {
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #f5f5f5;
+}
+
+.card-title {
+  font-size: 18px;
+  color: #333;
+  font-weight: 600;
+}
+
+/* 编辑按钮 */
+.edit-btn {
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.edit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* 信息网格 */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.info-item {
+  display: flex;
+  padding: 15px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border-left: 3px solid #667eea;
+}
+
+.info-item-full {
+  grid-column: 1 / -1;
+}
+
+.info-label {
+  color: #666;
+  font-size: 14px;
+  font-weight: 500;
+  min-width: 100px;
+}
+
+.info-value {
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 计划操作按钮组 */
+.plan-actions-header {
+  display: flex;
+  gap: 10px;
+}
+
+.add-plan-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.add-plan-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* 训练计划列表 */
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.plan-item {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  transition: all 0.3s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.plan-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  border-color: #667eea;
+}
+
+.plan-info {
+  flex: 1;
+}
+
+.plan-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.plan-meta {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  color: #666;
+  flex-wrap: wrap;
+}
+
+.plan-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.view-detail-btn {
+  padding: 8px 16px;
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.view-detail-btn:hover {
+  background: #7c3aed;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.cancel-btn {
+  padding: 8px 16px;
+  background: #f59e0b;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.cancel-btn:hover {
+  background: #d97706;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.delete-btn {
+  padding: 8px 16px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s;
+}
+
+.delete-btn:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+/* 状态标签 */
+.status-badge {
+  padding: 4px 12px;
+  background: #dcfce7;
+  color: #166534;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.completed {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.status-badge.cancelled {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* 统计卡片 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  padding: 20px;
+  color: white;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+/* 图表区域 */
+.chart-section {
+  margin-bottom: 20px;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.chart-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.date-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.date-filter label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.date-select {
+  padding: 6px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #333;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.date-select:hover {
+  border-color: #667eea;
+}
+
+.date-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date-input {
+  padding: 6px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #333;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.custom-date-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-date-range span {
+  color: #666;
+  font-size: 13px;
+}
+
+.apply-btn {
+  padding: 6px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.3s;
+}
+
+.apply-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.date-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.date-separator {
+  color: #666;
+  font-size: 13px;
+}
+
+.chart-container {
+  padding: 20px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+/* 动作选择器 */
+.exercise-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.exercise-selector label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.exercise-select {
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #333;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s;
+  min-width: 200px;
+}
+
+.exercise-select:hover {
+  border-color: #667eea;
+}
+
+.exercise-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+  .member-detail-container {
+    padding: 10px;
+  }
+
+  .back-header {
+    padding: 15px 20px;
+  }
+
+  .info-card {
+    padding: 20px;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .plan-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .plan-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .plan-actions-header {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .add-plan-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
 }
 
 .card-header h3 {
