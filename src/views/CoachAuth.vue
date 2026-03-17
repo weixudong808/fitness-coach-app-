@@ -181,7 +181,7 @@ const handleLogin = async () => {
     .from('coaches')
     .select('user_id')
     .eq('phone', formData.phone)
-    .single()
+    .maybeSingle()
 
   // 只有老用户（user_id 为空）才允许回退到旧方式
   if (oldCoach && !oldCoach.user_id) {

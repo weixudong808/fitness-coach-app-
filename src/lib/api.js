@@ -745,16 +745,17 @@ export async function registerCoachWithAuth(name, phone, password) {
  */
 export async function loginCoachWithAuth(phone, password) {
   try {
-    // 1. 统一手机号格式为 +86xxxxxxxxxxx
-    let formattedPhone = phone
-    if (!formattedPhone.startsWith('+')) {
-      formattedPhone = `+86${formattedPhone.replace(/^0+/, '')}`
+    // 1. 清洗手机号：去除非数字字符、去除开头的86和0
+    const normalizedPhone = String(phone).replace(/\D/g, '').replace(/^86/, '').replace(/^0+/, '')
+    if (!/^1\d{10}$/.test(normalizedPhone)) {
+      return { success: false, error: '手机号格式错误' }
     }
 
-    // 2. 使用 Supabase Auth 登录
+    // 2. 使用 Supabase Auth 登录（邮箱方式）
+    const email = `${normalizedPhone}@fitness.app`
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      phone: formattedPhone,
-      password: password
+      email,
+      password
     })
 
     if (authError) {
@@ -770,7 +771,7 @@ export async function loginCoachWithAuth(phone, password) {
       .from('coaches')
       .select('*')
       .eq('user_id', authData.user.id)
-      .single()
+      .maybeSingle()
 
     if (coachError || !coach) {
       return { success: false, error: '教练信息不存在' }
@@ -904,16 +905,17 @@ export async function registerMemberWithAuth(name, phone, password, gender, init
  */
 export async function loginMemberWithAuth(phone, password) {
   try {
-    // 1. 统一手机号格式为 +86xxxxxxxxxxx
-    let formattedPhone = phone
-    if (!formattedPhone.startsWith('+')) {
-      formattedPhone = `+86${formattedPhone.replace(/^0+/, '')}`
+    // 1. 清洗手机号：去除非数字字符、去除开头的86和0
+    const normalizedPhone = String(phone).replace(/\D/g, '').replace(/^86/, '').replace(/^0+/, '')
+    if (!/^1\d{10}$/.test(normalizedPhone)) {
+      return { success: false, error: '手机号格式错误' }
     }
 
-    // 2. 使用 Supabase Auth 登录
+    // 2. 使用 Supabase Auth 登录（邮箱方式）
+    const email = `${normalizedPhone}@fitness.app`
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      phone: formattedPhone,
-      password: password
+      email,
+      password
     })
 
     if (authError) {
