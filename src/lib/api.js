@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { phoneToAuthIdentity } from './authIdentity.js'
 
 // ==================== 教练相关 API ====================
 
@@ -665,31 +666,32 @@ export async function coachAddMember(coachId, memberId) {
  */
 export async function registerCoachWithAuth(name, phone, password) {
   try {
-    // 1. 统一手机号格式为 +86xxxxxxxxxxx
-    let formattedPhone = phone
-    if (!formattedPhone.startsWith('+')) {
-      formattedPhone = `+86${formattedPhone.replace(/^0+/, '')}`
+    // 1. 手机号标准化并校验格式（使用统一函数）
+    const { normalizedPhone, email, isValid } = phoneToAuthIdentity(phone)
+    if (!isValid) {
+      return { success: false, error: '手机号格式错误' }
     }
 
     // 2. 检查手机号是否已在 coaches 表注册
     const { data: existingCoach } = await supabase
       .from('coaches')
       .select('id')
-      .eq('phone', phone)
-      .single()
+      .eq('phone', normalizedPhone)
+      .maybeSingle()
 
     if (existingCoach) {
       return { success: false, error: '该手机号已注册' }
     }
 
-    // 3. 使用 Supabase Auth 创建用户
+    // 3. 使用邮箱方式注册（手机号映射到邮箱）
     const { data: authData, error: authError } = await supabase.auth.signUp({
-      phone: formattedPhone,
-      password: password,
+      email,
+      password,
       options: {
         data: {
-          name: name,
-          user_type: 'coach'
+          name,
+          user_type: 'coach',
+          phone: normalizedPhone
         }
       }
     })
@@ -705,14 +707,12 @@ export async function registerCoachWithAuth(name, phone, password) {
     // 4. 在 coaches 表插入记录（不存储 password）
     const { data: coach, error: coachError } = await supabase
       .from('coaches')
-      .insert([
-        {
-          user_id: authData.user.id,
-          name: name,
-          phone: phone,
-          audit_status: 'pending'
-        }
-      ])
+      .insert([{
+        user_id: authData.user.id,
+        name,
+        phone: normalizedPhone,
+        audit_status: 'pending'
+      }])
       .select()
       .single()
 
@@ -811,31 +811,32 @@ export async function loginCoachWithAuth(phone, password) {
  */
 export async function registerMemberWithAuth(name, phone, password, gender, initial_weight, invite_code) {
   try {
-    // 1. 统一手机号格式为 +86xxxxxxxxxxx
-    let formattedPhone = phone
-    if (!formattedPhone.startsWith('+')) {
-      formattedPhone = `+86${formattedPhone.replace(/^0+/, '')}`
+    // 1. 手机号标准化并校验格式（使用统一函数）
+    const { normalizedPhone, email, isValid } = phoneToAuthIdentity(phone)
+    if (!isValid) {
+      return { success: false, error: '手机号格式错误' }
     }
 
     // 2. 检查手机号是否已在 members 表注册
     const { data: existingMember } = await supabase
       .from('members')
       .select('id')
-      .eq('phone', phone)
-      .single()
+      .eq('phone', normalizedPhone)
+      .maybeSingle()
 
     if (existingMember) {
       return { success: false, error: '该手机号已注册' }
     }
 
-    // 3. 使用 Supabase Auth 创建用户
+    // 3. 使用邮箱方式注册（手机号映射到邮箱）
     const { data: authData, error: authError } = await supabase.auth.signUp({
-      phone: formattedPhone,
-      password: password,
+      email,
+      password,
       options: {
         data: {
-          name: name,
-          user_type: 'member'
+          name,
+          user_type: 'member',
+          phone: normalizedPhone
         }
       }
     })
@@ -851,16 +852,14 @@ export async function registerMemberWithAuth(name, phone, password, gender, init
     // 4. 在 members 表插入记录（不存储 password）
     const { data: member, error: memberError } = await supabase
       .from('members')
-      .insert([
-        {
-          user_id: authData.user.id,
-          name: name,
-          phone: phone,
-          gender: gender,
-          initial_weight: initial_weight,
-          current_weight: initial_weight
-        }
-      ])
+      .insert([{
+        user_id: authData.user.id,
+        name,
+        phone: normalizedPhone,
+        gender,
+        initial_weight,
+        current_weight: initial_weight
+      }])
       .select()
       .single()
 

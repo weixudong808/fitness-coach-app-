@@ -30,6 +30,11 @@ export async function adminTerminateCoach(coachId, reason) {
       return { success: false, error: '未登录或无管理员权限' }
     }
 
+    // token 判空保护，防止发送 Bearer undefined
+    if (!session.access_token) {
+      return { success: false, error: '管理员登录态失效，请重新登录' }
+    }
+
     if (!reason || !reason.trim()) {
       return { success: false, error: '解约原因不能为空' }
     }
@@ -38,10 +43,16 @@ export async function adminTerminateCoach(coachId, reason) {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ coachId, reason: reason.trim() })
     })
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}))
+      return { success: false, error: `请求失败(${response.status})：${errBody.message || errBody.error || '未知错误'}` }
+    }
 
     const result = await response.json()
     return result
@@ -66,14 +77,25 @@ export async function adminAuditCoach(coachId, status, rejectReason = '') {
       return { success: false, error: '未登录或无管理员权限' }
     }
 
+    // token 判空保护，防止发送 Bearer undefined
+    if (!session.access_token) {
+      return { success: false, error: '管理员登录态失效，请重新登录' }
+    }
+
     const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-audit-coach`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.access_token}`,
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ coachId, status, rejectReason })
     })
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}))
+      return { success: false, error: `请求失败(${response.status})：${errBody.message || errBody.error || '未知错误'}` }
+    }
 
     const result = await response.json()
     return result
