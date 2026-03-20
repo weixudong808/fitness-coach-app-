@@ -60,8 +60,6 @@ export function useAchievements() {
    */
   const calculateCheckInCount = async (memberId) => {
     try {
-      console.log('🔍 开始计算打卡次数，会员ID:', memberId)
-
       // 1. 先获取该会员的有效训练计划（status='active' 或 'completed'）
       const { data: memberPlans, error: planError } = await supabase
         .from('member_plans')
@@ -69,21 +67,17 @@ export function useAchievements() {
         .eq('member_id', memberId)
         .in('status', ['active', 'completed'])
 
-      console.log('📋 会员训练计划:', memberPlans)
-
       if (planError) {
         console.error('查询会员训练计划失败:', planError)
         return 0
       }
 
       if (!memberPlans || memberPlans.length === 0) {
-        console.log('⚠️ 没有找到有效的训练计划')
         return 0
       }
 
       // 2. 获取这些有效计划的模板ID
       const activeTemplateIds = memberPlans.map(p => p.template_id)
-      console.log('📝 模板ID列表:', activeTemplateIds)
 
       // 3. 统计这些模板下已完成的课次
       const { data: sessions, error: sessionError } = await supabase
@@ -91,9 +85,6 @@ export function useAchievements() {
         .select('id')
         .in('template_id', activeTemplateIds)
         .eq('completed', true)
-
-      console.log('✅ 已完成的课次:', sessions)
-      console.log('📊 打卡次数:', sessions?.length || 0)
 
       if (sessionError) {
         console.error('查询训练课次失败:', sessionError)
@@ -165,7 +156,22 @@ export function useAchievements() {
       if (error) throw error
       return count || 0
     } catch (error) {
-      console.error('计算转介绍人数失败:', error)
+      // 精准匹配：42703/PGRST204/message含referrer_id（字段不存在）
+      const isKnownMissingColumn =
+        error?.code === '42703' ||
+        error?.code === 'PGRST204' ||
+        error?.message?.includes('referrer_id')
+      if (isKnownMissingColumn) return 0
+
+      // 最后兜底：400 + message 为空（Supabase 部分版本的字段缺失格式）
+      // 仅限本函数内静默，不扩散到其他查询
+      const isEmptyBadRequest =
+        error?.status === 400 &&
+        (error?.message === '' || error?.message == null)
+      if (isEmptyBadRequest) return 0
+
+      // 其他真实故障：保留 warn
+      console.warn('计算转介绍人数失败（非字段缺失）:', error)
       return 0
     }
   }
@@ -335,7 +341,6 @@ export function useAchievements() {
 
     // 特殊处理：如果要求是 "0"，只要有实际值就算达标（用于柔韧性等不限次数的动作）
     if (requiredStr === '0' && actualStr) {
-      console.log(`✅ 特殊判断: ${actualStr} 存在即达标（要求为0）`)
       return true
     }
 
@@ -345,7 +350,6 @@ export function useAchievements() {
 
     // 如果都能解析为时间（大于0），则比较秒数
     if (actualSeconds > 0 && requiredSeconds > 0) {
-      console.log(`⏱️ 时间比较: ${actualStr} (${actualSeconds}秒) >= ${requiredStr} (${requiredSeconds}秒)`)
       return actualSeconds >= requiredSeconds
     }
 
@@ -413,29 +417,45 @@ export function useAchievements() {
       const exercises = requirement.exercises || []
 
       for (const exercise of exercises) {
-        // 查询该动作的记录（使用 ilike 支持大小写不敏感匹配）
+        // ⭐ 坐姿体前屈特殊判定：不看次数/重量，看备注字段是否含"手碰脚尖"
+        if (exercise.name === '坐姿体前屈') {
+          const { data: flexRecords, error: flexError } = await supabase
+            .from('session_exercises')
+            .select('progress_record, reps_standard, member_feedback, equipment_notes')
+            .in('session_id', sessionIds)
+            .ilike('exercise_name', '坐姿体前屈')
+
+          if (flexError) {
+            console.error('查询坐姿体前屈失败:', flexError)
+            continue
+          }
+
+          // 任意一条记录的任意备注字段含"手碰脚尖"即达标
+          const passed = flexRecords?.some(r =>
+            [r.progress_record, r.reps_standard, r.member_feedback, r.equipment_notes]
+              .some(field => field?.includes('手碰脚尖'))
+          )
+          if (passed) completedCount++
+          continue
+        }
+
+        // 普通动作：取所有历史记录（去掉 limit(1)），有一条达标即通过
         const { data: exerciseRecords, error: exerciseError } = await supabase
           .from('session_exercises')
           .select('reps_standard')
           .in('session_id', sessionIds)
           .ilike('exercise_name', exercise.name)
-          .limit(1)
 
         if (exerciseError) {
           console.error(`查询动作 ${exercise.name} 失败:`, exerciseError)
           continue
         }
 
-        // 检查是否达标
-        if (exerciseRecords && exerciseRecords.length > 0) {
-          const actual = exerciseRecords[0].reps_standard
-          if (meetsRequirement(actual, exercise.requirement)) {
-            completedCount++
-            console.log(`✅ ${exercise.name}: ${actual} >= ${exercise.requirement}`)
-          } else {
-            console.log(`❌ ${exercise.name}: ${actual} < ${exercise.requirement}`)
-          }
-        }
+        // 遍历所有记录，有一条达标即算通过
+        const passed = exerciseRecords?.some(r =>
+          meetsRequirement(r.reps_standard, exercise.requirement)
+        )
+        if (passed) completedCount++
       }
 
       return completedCount
@@ -555,9 +575,6 @@ export function useAchievements() {
 
           if (actualValue >= targetValue) {
             completedCount++
-            console.log(`✅ ${exercise.name}: ${actualStr} (${actualValue}) >= ${targetValue}`)
-          } else {
-            console.log(`❌ ${exercise.name}: ${actualStr} (${actualValue}) < ${targetValue}`)
           }
         }
       }
@@ -843,7 +860,6 @@ export function useAchievements() {
           achieved_at: new Date().toISOString()
         })
 
-      console.log(`✅ 颁发认证: ${achievementCode}`)
     } catch (error) {
       // 忽略重复插入错误
       if (!error.message?.includes('duplicate')) {

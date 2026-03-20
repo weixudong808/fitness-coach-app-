@@ -3,64 +3,6 @@ import { phoneToAuthIdentity } from './authIdentity.js'
 
 // ==================== 教练相关 API ====================
 
-// 注意：registerCoach 和 loginCoach 已废弃，请使用 registerCoachWithAuth 和 loginCoachWithAuth
-
-/**
- * 教练登录（旧方式 - 仅供老用户使用）
- * 注意：此函数仅用于 user_id 为空的老用户，新用户请使用 loginCoachWithAuth
- * @param {string} phone - 手机号
- * @param {string} password - 密码
- * @returns {Promise<{success: boolean, data?: any, error?: string}>}
- */
-export async function loginCoach(phone, password) {
-  try {
-    // 1. 查询教练信息（只查询老用户：user_id 为空）
-    const { data: coach, error: queryError } = await supabase
-      .from('coaches')
-      .select('*')
-      .eq('phone', phone)
-      .is('user_id', null)  // 只允许老用户（user_id 为空）
-      .single()
-
-    if (queryError) {
-      // 如果是 PGRST116 错误（找不到记录），返回友好错误
-      if (queryError.code === 'PGRST116') {
-        return { success: false, error: '手机号或密码错误' }
-      }
-      // 其他错误（如多条记录）也返回通用错误
-      return { success: false, error: '登录失败，请联系管理员' }
-    }
-
-    if (!coach) {
-      return { success: false, error: '手机号或密码错误' }
-    }
-
-    // 2. 验证密码（明文比对 - 仅用于老用户）
-    if (coach.password !== password) {
-      return { success: false, error: '手机号或密码错误' }
-    }
-
-    // 3. 检查审核状态
-    if (coach.audit_status === 'pending') {
-      return { success: false, error: '账号审核中，请等待管理员审核' }
-    }
-
-    if (coach.audit_status === 'rejected') {
-      return {
-        success: false,
-        error: `账号审核未通过，原因：${coach.reject_reason || '未说明'}`
-      }
-    }
-
-    // 4. 清除 Supabase Auth session（防止管理员/其他角色的登录状态干扰）
-    await supabase.auth.signOut()
-
-    return { success: true, data: coach }
-  } catch (error) {
-    return { success: false, error: error.message }
-  }
-}
-
 /**
  * 获取待审核的教练列表（管理员用）
  * @returns {Promise<{success: boolean, data?: any, error?: string}>}
@@ -86,52 +28,6 @@ export async function getPendingCoaches() {
 // 注意：auditCoach 已废弃，请使用 edge-functions.js 中的 adminAuditCoach
 
 // ==================== 会员相关 API ====================
-
-// 注意：registerMember 和 loginMember 已废弃，请使用 registerMemberWithAuth 和 loginMemberWithAuth
-
-/**
- * 会员登录（旧方式 - 仅供老用户使用）
- * 注意：此函数仅用于 user_id 为空的老用户，新用户请使用 loginMemberWithAuth
- * @param {string} phone - 手机号
- * @param {string} password - 密码
- * @returns {Promise<{success: boolean, data?: any, error?: string}>}
- */
-export async function loginMember(phone, password) {
-  try {
-    // 1. 查询会员信息（只查询老用户：user_id 为空）
-    const { data: member, error: queryError } = await supabase
-      .from('members')
-      .select('*')
-      .eq('phone', phone)
-      .is('user_id', null)  // 只允许老用户（user_id 为空）
-      .single()
-
-    if (queryError) {
-      // 如果是 PGRST116 错误（找不到记录），返回友好错误
-      if (queryError.code === 'PGRST116') {
-        return { success: false, error: '手机号或密码错误' }
-      }
-      // 其他错误（如多条记录）也返回通用错误
-      return { success: false, error: '登录失败，请联系管理员' }
-    }
-
-    if (!member) {
-      return { success: false, error: '手机号或密码错误' }
-    }
-
-    // 2. 验证密码（明文比对 - 仅用于老用户）
-    if (member.password !== password) {
-      return { success: false, error: '手机号或密码错误' }
-    }
-
-    // 3. 清除 Supabase Auth session（防止管理员/其他角色的登录状态干扰）
-    await supabase.auth.signOut()
-
-    return { success: true, data: member }
-  } catch (error) {
-    return { success: false, error: error.message }
-  }
-}
 
 /**
  * 更新会员当前体重

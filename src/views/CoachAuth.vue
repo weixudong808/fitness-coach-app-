@@ -98,8 +98,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { loginCoach, registerCoachWithAuth, loginCoachWithAuth } from '@/lib/api'
-import { supabase } from '@/lib/supabase'
+import { registerCoachWithAuth, loginCoachWithAuth } from '@/lib/api'
 
 const router = useRouter()
 const isLogin = ref(true)
@@ -144,7 +143,7 @@ const handleSubmit = async () => {
 
   try {
     if (isLogin.value) {
-      // 登录：先尝试新方式（Supabase Auth），失败再尝试旧方式
+      // 登录：使用 Supabase Auth
       await handleLogin()
     } else {
       // 注册：使用新方式（Supabase Auth）
@@ -159,11 +158,9 @@ const handleSubmit = async () => {
 
 // 处理登录
 const handleLogin = async () => {
-  // 1. 先尝试新方式登录（Supabase Auth）
   const newAuthResult = await loginCoachWithAuth(formData.phone, formData.password)
 
   if (newAuthResult.success) {
-    // 新方式登录成功
     localStorage.setItem('userType', 'coach')
     localStorage.setItem('userId', newAuthResult.data.id)
     localStorage.setItem('userName', newAuthResult.data.name)
@@ -176,33 +173,7 @@ const handleLogin = async () => {
     return
   }
 
-  // 2. 新方式失败，检查是否是老用户（user_id 为空）
-  const { data: oldCoach } = await supabase
-    .from('coaches')
-    .select('user_id')
-    .eq('phone', formData.phone)
-    .maybeSingle()
-
-  // 只有老用户（user_id 为空）才允许回退到旧方式
-  if (oldCoach && !oldCoach.user_id) {
-    const oldAuthResult = await loginCoach(formData.phone, formData.password)
-
-    if (oldAuthResult.success) {
-      // 旧方式登录成功
-      localStorage.setItem('userType', 'coach')
-      localStorage.setItem('userId', oldAuthResult.data.id)
-      localStorage.setItem('userName', oldAuthResult.data.name)
-      localStorage.setItem('coachData', JSON.stringify(oldAuthResult.data))
-
-      successMessage.value = '登录成功！'
-      setTimeout(() => {
-        router.push('/coach/invite-code')
-      }, 1000)
-      return
-    }
-  }
-
-  // 两种方式都失败
+  // 登录失败
   errorMessage.value = newAuthResult.error || '登录失败'
 }
 

@@ -62,6 +62,7 @@
               <span class="achievement-badge">{{ achievement.reward_badge }}</span>
               <div class="achievement-details">
                 <span class="achievement-name">{{ achievement.name }}</span>
+                <span class="achievement-standard">{{ formatRequirement(achievement) }}</span>
                 <span class="achievement-desc">{{ achievement.progress?.current_value || 0 }} / {{ achievement.progress?.target_value || 0 }}</span>
               </div>
             </div>
@@ -89,6 +90,7 @@
               <span class="achievement-badge">{{ achievement.reward_badge }}</span>
               <div class="achievement-details">
                 <span class="achievement-name">{{ achievement.name }}</span>
+                <span class="achievement-standard">{{ formatRequirement(achievement) }}</span>
                 <span class="achievement-desc">已转介绍 {{ achievement.progress?.current_value || 0 }} 人</span>
               </div>
             </div>
@@ -116,7 +118,7 @@
               <span class="achievement-badge">{{ achievement.reward_badge }}</span>
               <div class="achievement-details">
                 <span class="achievement-name">{{ achievement.name }}</span>
-                <span class="achievement-desc">{{ achievement.description }}</span>
+                <span class="achievement-standard">{{ formatRequirement(achievement) }}</span>
               </div>
             </div>
             <div class="achievement-progress">
@@ -144,7 +146,7 @@
               <span class="achievement-badge">{{ achievement.reward_badge }}</span>
               <div class="achievement-details">
                 <span class="achievement-name">{{ achievement.name }}</span>
-                <span class="achievement-desc">{{ achievement.description }}</span>
+                <span class="achievement-standard">{{ formatRequirement(achievement) }}</span>
                 <span v-if="!achievement.is_active" class="locked-hint">🔒 暂未开放</span>
               </div>
             </div>
@@ -214,6 +216,71 @@ const basicFitnessAchievements = ref([])
 const advancedFitnessAchievements = ref([])
 const allAchievements = ref([])
 const achievedList = ref([])
+const memberGender = ref('male')
+
+// 格式化目标值（自动加单位：个 / 分钟 / 秒）
+const formatTargetValue = (name, value) => {
+  if (typeof value === 'string') {
+    return value.replace('x体重', ' 倍体重')
+  }
+  // 时间类动作：支撑、战绳、公里跑
+  const isTime = ['平板支撑', '战绳', '公里'].some(k => name.includes(k))
+  if (isTime) {
+    if (value >= 60) {
+      const min = Math.floor(value / 60)
+      const sec = value % 60
+      return sec ? `${min}分${sec}秒` : `${min}分钟`
+    }
+    return `${value}秒`
+  }
+  return `${value}个`
+}
+
+// 格式化认证标准（覆盖所有类型）
+const formatRequirement = (achievement) => {
+  const req = achievement.requirement
+  if (!req) return achievement.description
+
+  switch (req.type) {
+    case 'register':
+      return '完成注册即可获得'
+    case 'check_in_count':
+      return `完成 ${req.target} 次训练打卡`
+    case 'referral_count':
+      return `成功转介绍 ${req.target} 位朋友`
+    case 'exercise_performance': {
+      const name = req.exercise || req.exercises?.[0]?.name || ''
+      // ⭐ 坐姿体前屈特殊文案：固定显示，不拼数字
+      if (name === '坐姿体前屈') return '坐姿体前屈 手碰脚尖'
+      // 普通动作：优先 exercises[0].requirement，再回退 target+unit
+      const standard = req.exercises?.[0]?.requirement
+        || (req.target != null ? `${req.target}${req.unit || ''}` : '')
+      if (!name || !standard) return achievement.description || ''
+      return `${name} 达到 ${standard}`
+    }
+    case 'exercise_group': {
+      const isMale = memberGender.value === 'male'
+      return (req.exercises || []).map(e => {
+        const raw = isMale ? e.target_male : e.target_female
+        return `${e.name}：${formatTargetValue(e.name, raw)}`
+      }).join('　|　')
+    }
+    case 'body_metric': {
+      const isMale = memberGender.value === 'male'
+      const min = isMale ? req.target_male_min : req.target_female_min
+      const max = isMale ? req.target_male_max : req.target_female_max
+      return `体脂率：${min}% ~ ${max}%`
+    }
+    case 'achievement_group': {
+      if (req.target === 'all') return '完成全部认证'
+      // target 取不到时用 sub_achievements 数量，再取不到用"全部"
+      const count = req.target ?? req.sub_achievements?.length
+      return count != null ? `完成全部 ${count} 项考核` : '完成全部考核'
+    }
+    default:
+      return achievement.description
+  }
+}
 
 // 统计已点亮的徽章数量
 const achievedBadgeCount = computed(() => {
@@ -263,30 +330,81 @@ const loadData = async () => {
       return
     }
 
-    // 先检查是否有进度数据
-    const { data: existingProgress } = await supabase
-      .from('member_achievement_progress')
-      .select('id')
-      .eq('member_id', memberId)
-      .limit(1)
+    // 1. 获取会员性别（用于 formatRequirement 显示正确标准）
+    memberGender.value = await getMemberGender(memberId)
 
-    // 如果没有进度数据，才计算进度
-    if (!existingProgress || existingProgress.length === 0) {
-      console.log('首次加载，开始计算进度...')
+    // 2. 检查进度缓存是否过期（基于数据库 last_updated，5分钟内不重算）
+    const { data: latestProgress } = await supabase
+      .from('member_achievement_progress')
+      .select('last_updated')
+      .eq('member_id', memberId)
+      .order('last_updated', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    // 用 Date.parse() 做时间戳比较；没有记录时设为 0 强制重算
+    const lastUpdatedTs = latestProgress?.last_updated
+      ? Date.parse(latestProgress.last_updated)
+      : 0
+    const needsRecalc = !Number.isFinite(lastUpdatedTs) || lastUpdatedTs < Date.now() - 5 * 60 * 1000
+
+    if (needsRecalc) {
       await calculateProgress(memberId)
     }
 
-    // 加载等级信息
+    // 3. 加载等级信息
     await getMemberLevel(memberId)
 
-    // 加载各类别认证
-    const newbieAchievements = await getAchievementsByCategory(memberId, 'newbie')
-    checkInAchievements.value = await getAchievementsByCategory(memberId, 'check_in')
-    influenceAchievements.value = await getAchievementsByCategory(memberId, 'influence')
-    basicFitnessAchievements.value = await getAchievementsByCategory(memberId, 'basic_fitness')
-    advancedFitnessAchievements.value = await getAchievementsByCategory(memberId, 'advanced_fitness')
+    // 4. 一次性查全部认证定义（含未激活，用于灰色展示）
+    const { data: allDefs } = await supabase
+      .from('achievement_definitions')
+      .select('*')
+      .order('sort_order')
 
-    // 合并所有认证数据（用于徽章墙）
+    // 5. 一次性查该会员全部进度缓存
+    const { data: allProgress } = await supabase
+      .from('member_achievement_progress')
+      .select('*')
+      .eq('member_id', memberId)
+
+    // 6. 建立进度 Map，方便快速查找
+    const progressMap = {}
+    allProgress?.forEach(p => { progressMap[p.achievement_code] = p })
+
+    // 7. 合并定义 + 进度（没有记录时默认 0%）
+    const emptyProgress = {
+      current_value: 0, target_value: 1,
+      progress_percent: 0, is_completed: false, completed_at: null
+    }
+    const mergedDefs = (allDefs || []).map(def => ({
+      ...def,
+      progress: progressMap[def.code] ?? emptyProgress
+    }))
+
+    // 8. 按分类 + 性别过滤
+    const byCategory = (category, includeInactive = false) => {
+      let defs = mergedDefs.filter(d =>
+        d.category === category && (includeInactive || d.is_active)
+      )
+      // 体能认证按性别过滤
+      if (category === 'basic_fitness' || category === 'advanced_fitness') {
+        defs = defs.filter(d => {
+          const code = d.code.toLowerCase()
+          if (code.includes('_male')) return memberGender.value === 'male'
+          if (code.includes('_female')) return memberGender.value === 'female'
+          return true
+        })
+      }
+      return defs
+    }
+
+    const newbieAchievements = byCategory('newbie')
+    checkInAchievements.value = byCategory('check_in')
+    influenceAchievements.value = byCategory('influence')
+    basicFitnessAchievements.value = byCategory('basic_fitness')
+    advancedFitnessAchievements.value = byCategory('advanced_fitness', true)
+
+    // 9. 合并给徽章墙
     allAchievements.value = [
       ...newbieAchievements,
       ...checkInAchievements.value,
@@ -295,7 +413,6 @@ const loadData = async () => {
       ...advancedFitnessAchievements.value
     ]
 
-    // 加载已获得的认证
     achievedList.value = await getAchievedList(memberId)
   } catch (error) {
     console.error('加载数据失败:', error)
@@ -615,6 +732,12 @@ onMounted(() => {
 .locked-hint {
   font-size: 12px;
   color: #999;
+}
+
+.achievement-standard {
+  font-size: 12px;
+  color: #409EFF;
+  margin-top: 2px;
 }
 
 .achievement-progress {
