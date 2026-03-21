@@ -336,6 +336,7 @@ export function useAchievements() {
     '俯卧撑':     ['俯卧撑', '卧撑'],
     '跪姿俯卧撑': ['跪姿俯卧撑', '跪姿卧撑'],
     '靠墙静蹲':   ['靠墙静蹲', '静蹲'],
+    '5公里跑':    ['5公里跑', '5公里', '5km跑', '5km', '5 km', '五公里跑'],
   }
 
   // 查这个动作名有没有别名组；没有就只用自身
@@ -629,7 +630,7 @@ export function useAchievements() {
           if (passed) completedCount++
 
         } else {
-          // 次数/时间类（引体向上、战绳等）：查 reps_standard，用 meetsRequirement
+          // 次数/时间类（引体向上、战绳、5公里跑等）：查 reps_standard
           const { data: exerciseRecords, error: exerciseError } = await supabase
             .from('session_exercises')
             .select('reps_standard')
@@ -641,9 +642,35 @@ export function useAchievements() {
             continue
           }
 
-          const passed = exerciseRecords?.some(r =>
-            meetsRequirement(r.reps_standard, target.value)
-          )
+          // 标准化 compare，默认 gte（越大越好），lte = 越小越好（如5公里跑）
+          const compare = String(exercise.compare || 'gte').toLowerCase()
+
+          const passed = exerciseRecords?.some(r => {
+            const actualSeconds = parseComplexTime(String(r.reps_standard || ''))
+            const requiredSeconds = parseComplexTime(String(target.value || ''))
+
+            if (actualSeconds > 0 && requiredSeconds > 0) {
+              // 时间解析成功：按 compare 方向比较
+              return compare === 'lte'
+                ? actualSeconds <= requiredSeconds   // 5公里跑：用时 ≤ 目标
+                : actualSeconds >= requiredSeconds   // 其他：完成量 ≥ 目标
+            }
+
+            // 时间解析失败：尝试纯数值比较，也遵守 compare 方向
+            const actualNum = parseTrainingValue(r.reps_standard)
+            const requiredNum = parseTrainingValue(target.value)
+            if (actualNum > 0 && requiredNum > 0) {
+              return compare === 'lte'
+                ? actualNum <= requiredNum
+                : actualNum >= requiredNum
+            }
+
+            // 最终降级：lte 只做精确匹配，避免方向反转；其余走通用比较
+            if (compare === 'lte') {
+              return String(r.reps_standard || '').trim() === String(target.value || '').trim()
+            }
+            return meetsRequirement(r.reps_standard, target.value)
+          })
           if (passed) completedCount++
         }
       }

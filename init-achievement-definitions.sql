@@ -355,7 +355,7 @@ VALUES (
   'advanced_fitness',
   7,
   '战绳、5公里跑达到高级标准',
-  '{"type":"exercise_group","exercises":[{"name":"战绳","target_male":180,"target_female":120},{"name":"5公里跑","target_male":1500,"target_female":1800}],"description":"心肺功能达到高级标准"}'::jsonb,
+  '{"type":"exercise_group","exercises":[{"name":"战绳","target_male":180,"target_female":120},{"name":"5公里跑","target_male":1500,"target_female":1800,"compare":"lte"}],"description":"心肺功能达到高级标准"}'::jsonb,
   '心肺功能优秀！你的耐力非常强！',
   '❤️',
   63
