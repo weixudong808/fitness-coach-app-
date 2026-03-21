@@ -203,12 +203,12 @@
           <el-input v-model="exerciseForm.next_goal" placeholder="如：维持并加重、小目标/无" />
         </el-form-item>
 
-        <el-form-item label="教练评语">
+        <el-form-item label="备注">
           <el-input
             v-model="exerciseForm.coach_comment"
             type="textarea"
             :rows="2"
-            placeholder="发力/难度/感受"
+            placeholder="请输入备注"
           />
         </el-form-item>
 

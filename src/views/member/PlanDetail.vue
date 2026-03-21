@@ -67,9 +67,9 @@
                 <el-table-column prop="reps_standard" label="次数/标准" width="120" />
                 <el-table-column prop="sets" label="组数" width="80" align="center" />
                 <el-table-column prop="next_goal" label="下节进阶目标" min-width="150" />
-                <el-table-column prop="member_feedback" label="会员反馈" min-width="150">
+                <el-table-column prop="coach_comment" label="备注" min-width="150">
                   <template #default="{ row }">
-                    {{ row.member_feedback || '-' }}
+                    {{ row.coach_comment ?? row.member_feedback ?? '-' }}
                   </template>
                 </el-table-column>
                 <el-table-column prop="progress_record" label="阶段进步记录" min-width="150">

@@ -333,24 +333,8 @@ const loadData = async () => {
     // 1. 获取会员性别（用于 formatRequirement 显示正确标准）
     memberGender.value = await getMemberGender(memberId)
 
-    // 2. 检查进度缓存是否过期（基于数据库 last_updated，5分钟内不重算）
-    const { data: latestProgress } = await supabase
-      .from('member_achievement_progress')
-      .select('last_updated')
-      .eq('member_id', memberId)
-      .order('last_updated', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    // 用 Date.parse() 做时间戳比较；没有记录时设为 0 强制重算
-    const lastUpdatedTs = latestProgress?.last_updated
-      ? Date.parse(latestProgress.last_updated)
-      : 0
-    const needsRecalc = !Number.isFinite(lastUpdatedTs) || lastUpdatedTs < Date.now() - 5 * 60 * 1000
-
-    if (needsRecalc) {
-      await calculateProgress(memberId)
-    }
+    // 2. 每次进页面都重算，确保录完课立即看到变化（已移除5分钟缓存）
+    await calculateProgress(memberId)
 
     // 3. 加载等级信息
     await getMemberLevel(memberId)

@@ -326,6 +326,35 @@ export function useAchievements() {
     return num
   }
 
+  // =====================================================
+  // 动作别名映射（解决：标准名比教练录入名长导致匹配不到）
+  // key = 认证定义里的标准名，value = 所有可能的写法（含标准名本身）
+  // 注意：动作名不要含逗号/括号，否则会造成 .or() 解析歧义
+  // =====================================================
+  const EXERCISE_ALIAS_MAP = {
+    '平板支撑':   ['平板支撑', '平板撑'],
+    '俯卧撑':     ['俯卧撑', '卧撑'],
+    '跪姿俯卧撑': ['跪姿俯卧撑', '跪姿卧撑'],
+    '靠墙静蹲':   ['靠墙静蹲', '静蹲'],
+  }
+
+  // 查这个动作名有没有别名组；没有就只用自身
+  const getExerciseAliases = (name) => {
+    if (EXERCISE_ALIAS_MAP[name]) return EXERCISE_ALIAS_MAP[name]
+    for (const aliases of Object.values(EXERCISE_ALIAS_MAP)) {
+      if (aliases.includes(name)) return aliases
+    }
+    return [name]
+  }
+
+  // 生成 Supabase .or() 的过滤条件字符串（PostgREST 里用 * 不用 %）
+  // 例：'exercise_name.ilike.*平板支撑*,exercise_name.ilike.*平板撑*'
+  const buildAliasFilter = (name) => {
+    return getExerciseAliases(name)
+      .map(a => `exercise_name.ilike.*${a}*`)
+      .join(',')
+  }
+
   /**
    * 检查是否满足动作要求（支持复杂时间格式）
    */
@@ -414,16 +443,22 @@ export function useAchievements() {
 
       // 3. 检查每个要求的动作是否完成
       let completedCount = 0
-      const exercises = requirement.exercises || []
+      // 兼容新格式(exercises[]) 和旧格式(单个 exercise 字段)
+      // 旧格式只传数字目标，不拼单位（meetsRequirement 的时间/数字解析能接住）
+      const exercises = requirement.exercises?.length
+        ? requirement.exercises
+        : requirement.exercise
+          ? [{ name: requirement.exercise, requirement: String(requirement.target ?? '') }]
+          : []
 
       for (const exercise of exercises) {
         // ⭐ 坐姿体前屈特殊判定：不看次数/重量，看备注字段是否含"手碰脚尖"
         if (exercise.name === '坐姿体前屈') {
           const { data: flexRecords, error: flexError } = await supabase
             .from('session_exercises')
-            .select('progress_record, reps_standard, member_feedback, equipment_notes')
+            .select('*')
             .in('session_id', sessionIds)
-            .ilike('exercise_name', '坐姿体前屈')
+            .or(buildAliasFilter('坐姿体前屈'))
 
           if (flexError) {
             console.error('查询坐姿体前屈失败:', flexError)
@@ -431,20 +466,22 @@ export function useAchievements() {
           }
 
           // 任意一条记录的任意备注字段含"手碰脚尖"即达标
+          // select('*') 兼容新库(coach_comment)和旧库(member_feedback)
+          // String() 防止 weight 等字段为数字时 .includes 报错
           const passed = flexRecords?.some(r =>
-            [r.progress_record, r.reps_standard, r.member_feedback, r.equipment_notes]
-              .some(field => field?.includes('手碰脚尖'))
+            [r.progress_record, r.reps_standard, r.coach_comment, r.member_feedback, r.equipment_notes, r.weight]
+              .some(field => String(field || '').includes('手碰脚尖'))
           )
           if (passed) completedCount++
           continue
         }
 
-        // 普通动作：取所有历史记录（去掉 limit(1)），有一条达标即通过
+        // 普通动作：取所有历史记录，有一条达标即通过
         const { data: exerciseRecords, error: exerciseError } = await supabase
           .from('session_exercises')
           .select('reps_standard')
           .in('session_id', sessionIds)
-          .ilike('exercise_name', exercise.name)
+          .or(buildAliasFilter(exercise.name))
 
         if (exerciseError) {
           console.error(`查询动作 ${exercise.name} 失败:`, exerciseError)
@@ -508,13 +545,14 @@ export function useAchievements() {
 
   /**
    * 计算动作组认证进度（exercise_group）
+   * 支持"倍数类"（"1.5x体重"）和"次数/时间类"（"15次"、"90秒"）两种目标格式
    */
   const calculateExerciseGroup = async (memberId, requirement) => {
     try {
-      // 1. 获取会员信息（需要性别来判断目标值）
+      // 1. 获取性别 + 初始体重（高级体能需要用体重算目标）
       const { data: member, error: memberError } = await supabase
         .from('members')
-        .select('gender')
+        .select('gender, initial_weight')
         .eq('id', memberId)
         .single()
 
@@ -522,6 +560,8 @@ export function useAchievements() {
       if (!member) return 0
 
       const isMale = member.gender === 'male'
+      // 没有体重记录用 Infinity，防止 0 × 倍数 = 0 导致误判为达标
+      const initialWeight = (member.initial_weight > 0) ? member.initial_weight : Infinity
 
       // 2. 获取会员的有效训练计划
       const { data: plans, error: plansError } = await supabase
@@ -535,7 +575,7 @@ export function useAchievements() {
 
       const templateIds = plans.map(p => p.template_id)
 
-      // 3. 获取这些计划的所有已完成课次
+      // 3. 获取所有已完成课次
       const { data: sessions, error: sessionsError } = await supabase
         .from('training_sessions')
         .select('id')
@@ -547,35 +587,64 @@ export function useAchievements() {
 
       const sessionIds = sessions.map(s => s.id)
 
-      // 4. 检查每个要求的动作是否完成
+      // 4. 解析目标值：区分"倍数类"（"1.5x体重"）和"直接值类"（"15次"、"90秒"）
+      const parseTarget = (value) => {
+        const str = String(value ?? '')
+        // 匹配 "1.5x体重" / "1.2×体重" / "1.5倍体重"
+        const multiplierMatch = str.match(/^([\d.]+)\s*[x×倍]/)
+        if (multiplierMatch) {
+          return { type: 'weight_multiplier', multiplier: parseFloat(multiplierMatch[1]) }
+        }
+        // 次数/时间等直接值
+        return { type: 'direct', value: str }
+      }
+
+      // 5. 逐个检查动作是否达标
       let completedCount = 0
       const exercises = requirement.exercises || []
 
       for (const exercise of exercises) {
-        // 根据性别确定目标值
-        const targetValue = isMale ? exercise.target_male : exercise.target_female
+        const targetRaw = isMale ? exercise.target_male : exercise.target_female
+        const target = parseTarget(targetRaw)
 
-        // 查询该动作的记录（使用 ilike 支持大小写不敏感匹配）
-        const { data: exerciseRecords, error: exerciseError } = await supabase
-          .from('session_exercises')
-          .select('reps_standard')
-          .in('session_id', sessionIds)
-          .ilike('exercise_name', exercise.name)
-          .limit(1)
+        if (target.type === 'weight_multiplier') {
+          // 倍数类（深蹲、硬拉等）：查 weight 字段，比 倍数 × 初始体重
+          const realTarget = target.multiplier * initialWeight
 
-        if (exerciseError) {
-          console.error(`查询动作 ${exercise.name} 失败:`, exerciseError)
-          continue
-        }
+          const { data: exerciseRecords, error: exerciseError } = await supabase
+            .from('session_exercises')
+            .select('weight')
+            .in('session_id', sessionIds)
+            .or(buildAliasFilter(exercise.name))
 
-        // 检查是否达标
-        if (exerciseRecords && exerciseRecords.length > 0) {
-          const actualStr = exerciseRecords[0].reps_standard
-          const actualValue = parseTrainingValue(actualStr)
-
-          if (actualValue >= targetValue) {
-            completedCount++
+          if (exerciseError) {
+            console.error(`查询动作 ${exercise.name} 失败:`, exerciseError)
+            continue
           }
+
+          const passed = exerciseRecords?.some(r => {
+            const actualWeight = parseTrainingValue(r.weight)
+            return actualWeight >= realTarget
+          })
+          if (passed) completedCount++
+
+        } else {
+          // 次数/时间类（引体向上、战绳等）：查 reps_standard，用 meetsRequirement
+          const { data: exerciseRecords, error: exerciseError } = await supabase
+            .from('session_exercises')
+            .select('reps_standard')
+            .in('session_id', sessionIds)
+            .or(buildAliasFilter(exercise.name))
+
+          if (exerciseError) {
+            console.error(`查询动作 ${exercise.name} 失败:`, exerciseError)
+            continue
+          }
+
+          const passed = exerciseRecords?.some(r =>
+            meetsRequirement(r.reps_standard, target.value)
+          )
+          if (passed) completedCount++
         }
       }
 
@@ -635,7 +704,7 @@ export function useAchievements() {
         .select('completed_at, is_completed')
         .eq('member_id', memberId)
         .eq('achievement_code', achievement.code)
-        .single()
+        .maybeSingle()
 
       switch (requirement.type) {
         case 'register':
@@ -659,7 +728,8 @@ export function useAchievements() {
         case 'exercise_performance':
           // 体能认证：计算已完成的动作数量
           currentValue = await calculateExercisePerformance(memberId, requirement)
-          targetValue = requirement.target
+          // 新格式(exercises[])：要完成全部动作数；旧格式(单个exercise)：一个动作完成即100%
+          targetValue = requirement.exercises?.length || 1
           break
 
         case 'exercise_group':
@@ -737,16 +807,14 @@ export function useAchievements() {
       // 获取所有认证定义
       const definitions = await getAchievementDefinitions()
 
-      // 计算每个认证的进度
-      const progressList = []
-      for (const achievement of definitions) {
-        const progress = await calculateSingleProgress(memberId, achievement)
-        progressList.push(progress)
-      }
+      // 并行计算每个认证的进度
+      const progressList = await Promise.all(
+        definitions.map(achievement => calculateSingleProgress(memberId, achievement))
+      )
 
-      // 批量更新或插入进度数据
-      for (const progress of progressList) {
-        const { error: upsertError } = await supabase
+      // 并行批量 upsert 进度数据
+      await Promise.all(progressList.map(progress =>
+        supabase
           .from('member_achievement_progress')
           .upsert({
             member_id: memberId,
@@ -760,19 +828,19 @@ export function useAchievements() {
           }, {
             onConflict: 'member_id,achievement_code'
           })
+          .then(({ error }) => {
+            if (error) {
+              console.error(`❌ 更新进度失败 [${progress.achievement_code}]:`, error)
+            }
+          })
+      ))
 
-        if (upsertError) {
-          console.error(`❌ 更新进度失败 [${progress.achievement_code}]:`, upsertError)
-          console.error('数据:', progress)
-        }
-      }
-
-      // 检查并颁发已完成的认证
-      for (const progress of progressList) {
-        if (progress.is_completed) {
-          await checkAndAwardAchievement(memberId, progress.achievement_code)
-        }
-      }
+      // 并行颁发已完成的认证
+      await Promise.all(
+        progressList
+          .filter(p => p.is_completed)
+          .map(p => checkAndAwardAchievement(memberId, p.achievement_code))
+      )
 
       // 更新会员等级
       await updateMemberLevel(memberId)
@@ -847,7 +915,7 @@ export function useAchievements() {
         .select('id')
         .eq('member_id', memberId)
         .eq('achievement_code', achievementCode)
-        .single()
+        .maybeSingle()
 
       if (existing) return // 已经获得，不重复颁发
 
@@ -938,12 +1006,20 @@ export function useAchievements() {
         .from('member_levels')
         .select('*')
         .eq('member_id', memberId)
-        .single()
+        .maybeSingle()
 
-      if (error) {
-        // 如果没有等级记录，初始化一个
+      if (error) throw error
+
+      if (!data) {
+        // 没有记录：初始化一次，然后只再查一次（不递归，避免权限失败时死循环）
         await updateMemberLevel(memberId)
-        return await getMemberLevel(memberId)
+        const { data: newData } = await supabase
+          .from('member_levels')
+          .select('*')
+          .eq('member_id', memberId)
+          .maybeSingle()
+        memberLevel.value = newData
+        return newData
       }
 
       memberLevel.value = data

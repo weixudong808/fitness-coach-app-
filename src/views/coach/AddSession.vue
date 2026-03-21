@@ -101,12 +101,12 @@
           />
         </el-form-item>
 
-        <el-form-item label="教练评语" prop="coach_comment">
+        <el-form-item label="备注" prop="coach_comment">
           <el-input
             v-model="exerciseForm.coach_comment"
             type="textarea"
             :rows="2"
-            placeholder="请输入教练评语"
+            placeholder="请输入备注"
           />
         </el-form-item>
 
